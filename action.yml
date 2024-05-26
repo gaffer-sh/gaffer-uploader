@@ -1,23 +1,31 @@
-name: 'The name of your action here'
-description: 'Provide a description here'
-author: 'Your name or organization here'
+name: 'gaffer-uploader'
+description: 'Upload test runs and reports to Gaffer'
+author: 'gaffer.sh'
 
-# Add your action's branding here. This will appear on the GitHub Marketplace.
-branding:
-  icon: 'heart'
-  color: 'red'
-
-# Define your inputs here.
 inputs:
-  milliseconds:
-    description: 'Your input description here'
+  gaffer_api_key:
+    description: 'Gaffer API key for your project.'
     required: true
-    default: '1000'
-
-# Define your outputs here.
-outputs:
-  time:
-    description: 'Your output description here'
+  artifact_name:
+    description:
+      'Name of the relevant artifact output from your generation step.'
+    required: false
+  run_report_name:
+    description:
+      'Filename of the relevant run report within your uploaded artifact.'
+    required: false
+  report_path:
+    description: 'Path to the relevant report file to upload.'
+    required: false
+  commit_sha:
+    description: 'SHA of the commit to upload.'
+    required: false
+  branch:
+    description: 'Branch of the commit to upload.'
+    required: false
+  test_framework:
+    description: 'Test framework of the report to upload.'
+    required: false
 
 runs:
   using: node20
