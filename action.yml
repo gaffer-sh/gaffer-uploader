@@ -4,8 +4,8 @@ author: 'Gaffer'
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
-  icon: 'heart'
-  color: 'red'
+  icon: 'upload-cloud'
+  color: 'green'
 
 # Define your inputs here.
 inputs:

@@ -66,14 +66,19 @@
     ],
     "reporters": [
       "default",
-      ["jest-html-reporter", { 
-        "pageTitle": "Test Report",
-        "outputPath": "./reports/test-report.html"
-      }]
+      [
+        "jest-html-reporter",
+        {
+          "pageTitle": "Test Report",
+          "outputPath": "./reports/test-report.html"
+        }
+      ]
     ]
   },
   "dependencies": {
-    "@actions/core": "^1.10.1"
+    "@actions/core": "^1.10.1",
+    "axios": "^1.7.5",
+    "form-data": "^4.0.0"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

@@ -1,4 +1,30 @@
 import * as core from '@actions/core'
+import * as path from 'path'
+import * as fs from 'fs'
+import axios from 'axios'
+import FormData from 'form-data'
+
+function addFilesToFormData(folderPath: string, form: FormData, baseFolderPath: string = folderPath): void {
+  try {
+    const files = fs.readdirSync(folderPath)
+
+    for (const file of files) {
+      const filePath = path.join(folderPath, file)
+      const fileStat = fs.statSync(filePath)
+
+      if (fileStat.isDirectory()) {
+        addFilesToFormData(filePath, form, baseFolderPath)
+      } else {
+        const relativePath = path.relative(baseFolderPath, filePath)
+        form.append('run_package', fs.createReadStream(filePath), {
+          filepath: relativePath
+        })
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
 
 /**
  * The main function for the action.
@@ -14,6 +40,21 @@ export async function run(): Promise<void> {
     }
 
     core.debug('Beginning Gaffer Upload...')
+    const form = new FormData()
+    addFilesToFormData('./playwright-report', form)
+    console.dir(form);
+
+    try {
+      const formHeaders = form.getHeaders()
+      const headers = {
+        ...formHeaders,
+        'X-Gaffer-Api-Key': 'NTAxMWQxYjUuN2Y0MGI5ZDItOTU5OC00OTRjLWE3YjYtYTFjNmQ5ZmJkZmY1',
+      }
+      await axios.post('http://localhost/upload', form, { headers });
+    } catch (e) {
+      console.error(e)
+      core.setFailed('Failed to upload to Gaffer');
+    }
 
     core.setOutput('status', 'success')
   } catch (error) {
