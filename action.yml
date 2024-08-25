@@ -1,6 +1,6 @@
-name: 'The name of your action here'
-description: 'Provide a description here'
-author: 'Your name or organization here'
+name: 'Gaffer Upload'
+description: 'Uploads Test Reports to Gaffer.sh'
+author: 'Gaffer'
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
@@ -10,7 +10,7 @@ branding:
 # Define your inputs here.
 inputs:
   milliseconds:
-    description: 'Your input description here'
+    description: 'Time in milliseconds'
     required: true
     default: '1000'
 
