@@ -41,8 +41,10 @@ export async function run(): Promise<void> {
 
     core.debug('Beginning Gaffer Upload...')
     const form = new FormData()
-    addFilesToFormData('./playwright-report', form)
-    console.dir(form);
+    // addFilesToFormData('./playwright-report', form)
+    addFilesToFormData('./reports', form)
+    form.append('tags:key', 'commit_sha')
+    form.append('tags:value', 'abcd1234')
 
     try {
       const formHeaders = form.getHeaders()
