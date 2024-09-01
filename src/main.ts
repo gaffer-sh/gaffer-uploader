@@ -43,8 +43,10 @@ export async function run(): Promise<void> {
     const form = new FormData()
     // addFilesToFormData('./playwright-report', form)
     addFilesToFormData('./reports', form)
-    form.append('tags:key', 'commit_sha')
-    form.append('tags:value', 'abcd1234')
+    form.append('tags.key', 'commit_sha')
+    form.append('tags.value', 'abcd1234')
+    form.append('tags.key', 'branch')
+    form.append('tags.value', 'main')
 
     try {
       const formHeaders = form.getHeaders()
