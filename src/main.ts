@@ -1,26 +1,75 @@
 import * as core from '@actions/core'
-import { wait } from './wait'
 
-/**
- * The main function for the action.
- * @returns {Promise<void>} Resolves when the action is complete.
- */
+import {
+  GAFFER_API_KEY_VAR,
+  ARTIFACT_NAME_VAR,
+  TEST_FRAMEWORK_VAR,
+  BRANCH_VAR,
+  COMMIT_SHA_VAR,
+  REPORT_PATH_VAR
+} from './constants'
+import { handleArtifactInput } from './handle-artifact-input'
+import { handleLocalReportInput } from './handle-local-report-input'
+import { TestRunTag } from './types'
+
+function parseTestRunTagsFromInputs(): TestRunTag[] {
+  const testRunTags: TestRunTag[] = []
+  const commitSha: string = core.getInput(COMMIT_SHA_VAR)
+  const branch: string = core.getInput(BRANCH_VAR)
+  const testFramework: string = core.getInput(TEST_FRAMEWORK_VAR)
+
+  if (commitSha) {
+    testRunTags.push({ key: 'commit_sha', value: commitSha })
+  }
+
+  if (branch) {
+    testRunTags.push({ key: 'branch', value: branch })
+  }
+
+  if (testFramework) {
+    testRunTags.push({ key: 'test_framework', value: testFramework })
+  }
+
+  return testRunTags
+}
+
 export async function run(): Promise<void> {
   try {
-    const ms: string = core.getInput('milliseconds')
+    const apiKey: string = core.getInput(GAFFER_API_KEY_VAR)
 
-    // Debug logs are only output if the `ACTIONS_STEP_DEBUG` secret is true
-    core.debug(`Waiting ${ms} milliseconds ...`)
+    if (!apiKey) {
+      throw new Error('Gaffer API key not provided.')
+    }
 
-    // Log the current timestamp, wait, then log the new timestamp
-    core.debug(new Date().toTimeString())
-    await wait(parseInt(ms, 10))
-    core.debug(new Date().toTimeString())
+    const artifactName: string = core.getInput(ARTIFACT_NAME_VAR)
+    const reportPath: string = core.getInput(REPORT_PATH_VAR)
 
-    // Set outputs for other workflow steps to use
-    core.setOutput('time', new Date().toTimeString())
-  } catch (error) {
-    // Fail the workflow run if an error occurs
-    if (error instanceof Error) core.setFailed(error.message)
+    if (!artifactName && !reportPath) {
+      throw new Error('Artifact name or report path not provided.')
+    }
+
+    if (artifactName && reportPath) {
+      throw new Error('Cannot provide both artifact name and report path.')
+    }
+
+    if (artifactName) {
+      await handleArtifactInput(
+        artifactName,
+        apiKey,
+        parseTestRunTagsFromInputs()
+      )
+    } else if (reportPath) {
+      await handleLocalReportInput(
+        reportPath,
+        apiKey,
+        parseTestRunTagsFromInputs()
+      )
+    }
+
+    core.setOutput('status', 'success')
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      core.setFailed(error.message)
+    }
   }
 }
