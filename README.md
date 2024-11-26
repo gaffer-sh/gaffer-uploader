@@ -50,3 +50,15 @@ For more examples, visit the
     branch: ${{ github.ref_name }}
     test_framework: jest
 ```
+
+## Usage with Environment Variables
+
+Depending on your Github Action trigger, you may need to use different methods
+to set the `branch` parameter.
+
+I've found this to be the most reliable way to set the `branch` parameter:
+
+```yaml
+env:
+  branch_name: ${{ github.head_ref || github.ref_name }}
+```

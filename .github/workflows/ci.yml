@@ -74,6 +74,6 @@ jobs:
         with:
           gaffer_api_key: ${{ secrets.GAFFER_API_KEY }}
           report_path: test-report.html
-          commit_sha: ${{ github.sha }}
+          commit_sha: ${{ github.event.pull_request.head.sha }}
           branch: ${{ github.head_ref || github.ref_name }}
           test_framework: jest
