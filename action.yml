@@ -2,29 +2,25 @@ name: 'gaffer-uploader'
 description: 'Upload test runs and reports to Gaffer'
 author: 'gaffer.sh'
 
+branding:
+  icon: 'monitor'
+  color: 'blue'
+
 inputs:
   gaffer_api_key:
     description: 'Gaffer API key for your project.'
     required: true
-  artifact_name:
-    description:
-      'Name of the relevant artifact output from your generation step.'
-    required: false
-  run_report_name:
-    description:
-      'Filename of the relevant run report within your uploaded artifact.'
-    required: false
   report_path:
-    description: 'Path to the relevant report file to upload.'
+    description: 'Path to the relevant report file or directory to upload.'
     required: false
   commit_sha:
-    description: 'SHA of the commit to upload.'
+    description: 'Git commit SHA to associate with the test run report.'
     required: false
   branch:
-    description: 'Branch of the commit to upload.'
+    description: 'Git branch to associate with the test run report.'
     required: false
   test_framework:
-    description: 'Test framework of the report to upload.'
+    description: 'Test framework to associate with the test run report.'
     required: false
 
 runs:
