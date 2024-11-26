@@ -5,122 +5,60 @@
 [![Check dist/](https://github.com/actions/typescript-action/actions/workflows/check-dist.yml/badge.svg)](https://github.com/actions/typescript-action/actions/workflows/check-dist.yml)
 [![Coverage](./badges/coverage.svg)](./badges/coverage.svg)
 
-## Contributing
+Use this action to upload your HTML test reports to Gaffer.
 
-1. Create a new branch
-
-   ```bash
-   git checkout -b releases/v1
-   ```
-
-1. Replace the contents of `src/` with your action code
-1. Add tests to `__tests__/` for your source code
-1. Format, test, and build the action
-
-   ```bash
-   npm run all
-   ```
-
-   > This step is important! It will run [`ncc`](https://github.com/vercel/ncc)
-   > to build the final JavaScript action code with all dependencies included.
-   > If you do not run this step, your action will not work correctly when it is
-   > used in a workflow. This step also includes the `--license` option for
-   > `ncc`, which will create a license file for all of the production node
-   > modules used in your project.
-
-1. Commit your changes
-
-   ```bash
-   git add .
-   git commit -m "My first action is ready!"
-   ```
-
-1. Push them to your repository
-
-   ```bash
-   git push -u origin releases/v1
-   ```
-
-1. Create a pull request and get feedback on your action
-1. Merge the pull request into the `main` branch
-
-Your action is now published! :rocket:
-
-For information about versioning your action, see
-[Versioning](https://github.com/actions/toolkit/blob/master/docs/action-versioning.md)
-in the GitHub Actions toolkit.
-
-## Validate the Action
-
-You can now validate the action by referencing it in a workflow file. For
-example, [`ci.yml`](./.github/workflows/ci.yml) demonstrates how to reference an
-action in the same repository.
-
-```yaml
-steps:
-  - name: Checkout
-    id: checkout
-    uses: actions/checkout@v4
-
-  - name: Test Local Action
-    id: test-action
-    uses: ./
-    with:
-      milliseconds: 1000
-
-  - name: Print Output
-    id: output
-    run: echo "${{ steps.test-action.outputs.time }}"
-```
-
-For example workflow runs, check out the
-[Actions tab](https://github.com/actions/typescript-action/actions)! :rocket:
+For more examples, visit the
+[Gaffer GitHub Action documentation](https://docs.gaffer.sh/guides/github-action).
 
 ## Usage
 
-After testing, you can create version tag(s) that developers can use to
-reference different stable versions of your action. For more information, see
-[Versioning](https://github.com/actions/toolkit/blob/master/docs/action-versioning.md)
-in the GitHub Actions toolkit.
-
-To include the action in a workflow in another repository, you can use the
-`uses` syntax with the `@` symbol to reference a specific branch, tag, or commit
-hash.
+### Basic Usage
 
 ```yaml
-steps:
-  - name: Checkout
-    id: checkout
-    uses: actions/checkout@v4
-
-  - name: Test Local Action
-    id: test-action
-    uses: actions/typescript-action@v1 # Commit with the `v1` tag
-    with:
-      milliseconds: 1000
-
-  - name: Print Output
-    id: output
-    run: echo "${{ steps.test-action.outputs.time }}"
+- name: Gaffer Upload
+  uses: gaffer-sh/gaffer-uploader@v0.1.0
+  if: always()
+  with:
+    # The API key for your Gaffer account
+    gaffer_api_key: ${{ secrets.GAFFER_API_KEY }}
+    # The path to the file or directory containing your HTML test results file
+    report_path: ./test-results.html
+    commit_sha: ${{ github.sha }}
+    branch: ${{ github.ref_name }}
+    test_framework: jest
 ```
 
-## Publishing a New Release
+### Usage with Artifacts
 
-This project includes a helper script, [`script/release`](./script/release)
-designed to streamline the process of tagging and pushing new releases for
-GitHub Actions.
+```yaml
+- name: Download all reports from artifacts
+  uses: actions/download-artifact@v4
+  with:
+    path: all-reports
+    pattern: all-reports-*
+    merge-multiple: true
 
-GitHub Actions allows users to select a specific version of the action to use,
-based on release tags. This script simplifies this process by performing the
-following steps:
+- name: Gaffer Upload
+  uses: gaffer-sh/gaffer-uploader@v0.1.0
+  if: always()
+  with:
+    # The API key for your Gaffer account
+    gaffer_api_key: ${{ secrets.GAFFER_API_KEY }}
+    # The path to the file or directory containing your HTML test results file
+    report_path: ./all-reports
+    commit_sha: ${{ github.sha }}
+    branch: ${{ github.ref_name }}
+    test_framework: jest
+```
 
-1. **Retrieving the latest release tag:** The script starts by fetching the most
-   recent release tag by looking at the local data available in your repository.
-1. **Prompting for a new release tag:** The user is then prompted to enter a new
-   release tag. To assist with this, the script displays the latest release tag
-   and provides a regular expression to validate the format of the new tag.
-1. **Tagging the new release:** Once a valid new tag is entered, the script tags
-   the new release.
-1. **Pushing the new tag to the remote:** Finally, the script pushes the new tag
-   to the remote repository. From here, you will need to create a new release in
-   GitHub and users can easily reference the new tag in their workflows.
+## Usage with Environment Variables
+
+Depending on your GitHub Action trigger, you may need to use different methods
+to set the `branch` parameter.
+
+I've found this to be the most reliable way to set the `branch` parameter:
+
+```yaml
+env:
+  branch_name: ${{ github.head_ref || github.ref_name }}
+```

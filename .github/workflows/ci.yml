@@ -52,30 +52,8 @@ jobs:
           name: test-report-artifact
           path: ./test-report.html
 
-  test-artifact-upload:
-    name: Artifact Upload Test
-    runs-on: ubuntu-latest
-    needs: test-typescript
-    if: always()
-
-    steps:
-      - name: Checkout
-        id: checkout
-        uses: actions/checkout@v4
-
-      - name: Test Local Action
-        id: test-artifact-upload
-        uses: ./
-        with:
-          gaffer_api_key: ${{ secrets.GAFFER_API_KEY }}
-          artifact_name: test-report-artifact
-          run_report_name: test-report.html
-          commit_sha: ${{ github.sha }}
-          branch: ${{ github.ref_name }}
-          test_framework: jest
-
-  test-local-file-upload:
-    name: Local File Upload Test
+  test-gaffer-upload:
+    name: Test Gaffer Upload
     runs-on: ubuntu-latest
     needs: test-typescript
 
@@ -96,6 +74,6 @@ jobs:
         with:
           gaffer_api_key: ${{ secrets.GAFFER_API_KEY }}
           report_path: test-report.html
-          commit_sha: ${{ github.sha }}
-          branch: ${{ github.ref_name }}
+          commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+          branch: ${{ github.head_ref || github.ref_name }}
           test_framework: jest
