@@ -53,7 +53,7 @@ For more examples, visit the
 
 ## Usage with Environment Variables
 
-Depending on your Github Action trigger, you may need to use different methods
+Depending on your GitHub Action trigger, you may need to use different methods
 to set the `branch` parameter.
 
 I've found this to be the most reliable way to set the `branch` parameter:
