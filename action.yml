@@ -22,6 +22,10 @@ inputs:
   test_framework:
     description: 'Test framework to associate with the test run report.'
     required: false
+  test_suite:
+    description:
+      'Optional name of the test suite to associate with the test run report.'
+    required: false
 
 runs:
   using: node20
