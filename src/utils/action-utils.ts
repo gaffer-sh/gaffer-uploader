@@ -13,7 +13,7 @@ import { TestRunTag } from '../types'
 /**
  * Parses test run tags from GitHub Actions inputs.
  *
- * Reads commit SHA, branch name, and test framework inputs using the GitHub Actions core API.
+ * Reads commit SHA, branch name, test framework, and test suite inputs using the GitHub Actions core API.
  * For each non-empty input, creates a corresponding TestRunTag with the input value.
  *
  * @returns An array of TestRunTag objects containing the parsed input values
