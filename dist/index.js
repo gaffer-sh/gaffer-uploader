@@ -29156,7 +29156,7 @@ module.exports = {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_BASE_URL = void 0;
+exports.TEST_SUITE_VAR = exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_BASE_URL = void 0;
 // Gaffer Constants
 exports.GAFFER_UPLOAD_BASE_URL = 'https://app.gaffer.sh/upload';
 exports.GAFFER_API_KEY_VAR = 'gaffer_api_key';
@@ -29165,6 +29165,7 @@ exports.REPORT_PATH_VAR = 'report_path';
 exports.COMMIT_SHA_VAR = 'commit_sha';
 exports.BRANCH_VAR = 'branch';
 exports.TEST_FRAMEWORK_VAR = 'test_framework';
+exports.TEST_SUITE_VAR = 'test_suite';
 
 
 /***/ }),
@@ -29253,7 +29254,7 @@ const constants_1 = __nccwpck_require__(7242);
 /**
  * Parses test run tags from GitHub Actions inputs.
  *
- * Reads commit SHA, branch name, and test framework inputs using the GitHub Actions core API.
+ * Reads commit SHA, branch name, test framework, and test suite inputs using the GitHub Actions core API.
  * For each non-empty input, creates a corresponding TestRunTag with the input value.
  *
  * @returns An array of TestRunTag objects containing the parsed input values
@@ -29263,6 +29264,7 @@ function parseTestRunTagsFromInputs() {
     const commitSha = core.getInput(constants_1.COMMIT_SHA_VAR);
     const branch = core.getInput(constants_1.BRANCH_VAR);
     const testFramework = core.getInput(constants_1.TEST_FRAMEWORK_VAR);
+    const testSuite = core.getInput(constants_1.TEST_SUITE_VAR);
     if (commitSha) {
         testRunTags.push({ key: 'commit_sha', value: commitSha });
     }
@@ -29271,6 +29273,9 @@ function parseTestRunTagsFromInputs() {
     }
     if (testFramework) {
         testRunTags.push({ key: 'test_framework', value: testFramework });
+    }
+    if (testSuite) {
+        testRunTags.push({ key: 'test_suite', value: testSuite });
     }
     return testRunTags;
 }

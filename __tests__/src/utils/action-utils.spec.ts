@@ -29,7 +29,7 @@ describe('action-utils', () => {
       const result = parseTestRunTagsFromInputs()
 
       expect(result).toEqual([])
-      expect(mockedCore.getInput).toHaveBeenCalledTimes(3)
+      expect(mockedCore.getInput).toHaveBeenCalledTimes(4)
     })
 
     it('should return tags for all provided inputs', () => {
