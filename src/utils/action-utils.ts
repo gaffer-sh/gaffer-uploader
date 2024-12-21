@@ -5,7 +5,8 @@ import {
   COMMIT_SHA_VAR,
   GAFFER_API_KEY_VAR,
   REPORT_PATH_VAR,
-  TEST_FRAMEWORK_VAR
+  TEST_FRAMEWORK_VAR,
+  TEST_SUITE_VAR
 } from '../constants'
 import { TestRunTag } from '../types'
 
@@ -22,6 +23,7 @@ export function parseTestRunTagsFromInputs(): TestRunTag[] {
   const commitSha: string = core.getInput(COMMIT_SHA_VAR)
   const branch: string = core.getInput(BRANCH_VAR)
   const testFramework: string = core.getInput(TEST_FRAMEWORK_VAR)
+  const testSuite: string = core.getInput(TEST_SUITE_VAR)
 
   if (commitSha) {
     testRunTags.push({ key: 'commit_sha', value: commitSha })
@@ -33,6 +35,10 @@ export function parseTestRunTagsFromInputs(): TestRunTag[] {
 
   if (testFramework) {
     testRunTags.push({ key: 'test_framework', value: testFramework })
+  }
+
+  if (testSuite) {
+    testRunTags.push({ key: 'test_suite', value: testSuite })
   }
 
   return testRunTags

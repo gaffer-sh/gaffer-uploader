@@ -26,6 +26,7 @@ For more examples, visit the
     commit_sha: ${{ github.sha }}
     branch: ${{ github.ref_name }}
     test_framework: jest
+    test_suite: unit
 ```
 
 ### Usage with Artifacts
@@ -49,6 +50,7 @@ For more examples, visit the
     commit_sha: ${{ github.sha }}
     branch: ${{ github.ref_name }}
     test_framework: jest
+    test_suite: unit
 ```
 
 ## Usage with Environment Variables

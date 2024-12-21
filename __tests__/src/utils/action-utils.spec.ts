@@ -8,7 +8,8 @@ import {
   COMMIT_SHA_VAR,
   GAFFER_API_KEY_VAR,
   REPORT_PATH_VAR,
-  TEST_FRAMEWORK_VAR
+  TEST_FRAMEWORK_VAR,
+  TEST_SUITE_VAR
 } from '../../../src/constants'
 
 // Mock @actions/core
@@ -36,7 +37,8 @@ describe('action-utils', () => {
         const values: Record<string, string> = {
           [COMMIT_SHA_VAR]: 'abc123',
           [BRANCH_VAR]: 'main',
-          [TEST_FRAMEWORK_VAR]: 'jest'
+          [TEST_FRAMEWORK_VAR]: 'jest',
+          [TEST_SUITE_VAR]: 'unit'
         }
         return values[name] || ''
       })
@@ -46,7 +48,8 @@ describe('action-utils', () => {
       expect(result).toEqual([
         { key: 'commit_sha', value: 'abc123' },
         { key: 'branch', value: 'main' },
-        { key: 'test_framework', value: 'jest' }
+        { key: 'test_framework', value: 'jest' },
+        { key: 'test_suite', value: 'unit' }
       ])
     })
 

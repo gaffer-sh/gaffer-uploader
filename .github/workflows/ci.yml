@@ -77,3 +77,4 @@ jobs:
           commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
           branch: ${{ github.head_ref || github.ref_name }}
           test_framework: jest
+          test_suite: unit
