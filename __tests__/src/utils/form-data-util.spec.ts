@@ -2,7 +2,7 @@ import FormData from 'form-data'
 import * as fs from 'fs'
 import axios from 'axios'
 
-import { TestRunTag } from '../../../src/types'
+import { TestRunTags } from '../../../src/types'
 import {
   createUploadFormData,
   uploadToGaffer
@@ -14,17 +14,28 @@ jest.mock('fs')
 jest.mock('axios')
 
 describe('form-data-utils', () => {
+  let mockAppend: jest.Mock
+
   beforeEach(() => {
     jest.clearAllMocks()
+    // Setup mock append function that will be used by all FormData instances
+    mockAppend = jest.fn()
+    ;(FormData as jest.MockedClass<typeof FormData>).mockImplementation(
+      () =>
+        ({
+          append: mockAppend,
+          getHeaders: jest.fn(() => ({}))
+        }) as unknown as FormData
+    )
   })
 
   describe('createUploadFormData', () => {
-    const mockTags: TestRunTag[] = [
-      { key: 'environment', value: 'staging' },
-      { key: 'version', value: '1.0.0' }
-    ]
+    const mockTags: TestRunTags = {
+      commitSha: 'abc123',
+      branch: 'main'
+    }
 
-    it('should create form data with a single file', () => {
+    it('should create form data with a single file and JSON tags', () => {
       // Mock fs.statSync to return file stats
       const mockStats = { isDirectory: () => false }
       const statSync = fs.statSync as jest.Mock
@@ -36,21 +47,17 @@ describe('form-data-utils', () => {
       createReadStream.mockReturnValue(mockReadStream)
 
       const filePath = '/path/to/file.zip'
-      const form = createUploadFormData(filePath, mockTags)
+      createUploadFormData(filePath, mockTags)
 
       expect(FormData).toHaveBeenCalled()
-      expect(form.append).toHaveBeenNthCalledWith(
-        1,
-        'run_package',
-        mockReadStream,
-        {
-          filepath: 'file.zip'
-        }
+      expect(mockAppend).toHaveBeenNthCalledWith(1, 'files', mockReadStream, {
+        filepath: 'file.zip'
+      })
+      expect(mockAppend).toHaveBeenNthCalledWith(
+        2,
+        'tags',
+        JSON.stringify(mockTags)
       )
-      expect(form.append).toHaveBeenNthCalledWith(2, 'tags.key', 'environment')
-      expect(form.append).toHaveBeenNthCalledWith(3, 'tags.value', 'staging')
-      expect(form.append).toHaveBeenNthCalledWith(4, 'tags.key', 'version')
-      expect(form.append).toHaveBeenNthCalledWith(5, 'tags.value', '1.0.0')
     })
 
     it('should create form data with multiple files from directory', () => {
@@ -71,18 +78,19 @@ describe('form-data-utils', () => {
       createReadStream.mockReturnValue(mockReadStream)
 
       const dirPath = '/path/to/dir'
-      const form = createUploadFormData(dirPath, mockTags)
+      createUploadFormData(dirPath, mockTags)
 
       expect(FormData).toHaveBeenCalled()
       expect(fs.readdirSync).toHaveBeenCalledWith(dirPath)
-      expect(form.append).toHaveBeenCalledTimes(6) // 2 files + 4 tag entries
+      expect(mockAppend).toHaveBeenCalledTimes(3) // 2 files + 1 JSON tags entry
     })
   })
 
   describe('uploadToGaffer', () => {
-    it('should upload form data with correct headers', async () => {
+    it('should upload form data with correct headers to specified endpoint', async () => {
       const mockForm = new FormData()
       const apiKey = 'test-api-key'
+      const apiEndpoint = 'https://app.gaffer.sh/api/upload'
       const mockHeaders = { 'Content-Type': 'multipart/form-data' }
 
       // Mock getHeaders as a jest function instead of a method reference
@@ -93,24 +101,43 @@ describe('form-data-utils', () => {
       const post = axios.post as jest.Mock
       post.mockResolvedValue(mockResponse)
 
-      const result = await uploadToGaffer(mockForm, apiKey)
+      const result = await uploadToGaffer(mockForm, apiKey, apiEndpoint)
 
-      expect(axios.post).toHaveBeenCalledWith(
-        expect.any(String), // GAFFER_UPLOAD_BASE_URL
-        mockForm,
-        {
-          headers: {
-            ...mockHeaders,
-            'X-Gaffer-API-Key': apiKey
-          }
+      expect(axios.post).toHaveBeenCalledWith(apiEndpoint, mockForm, {
+        headers: {
+          ...mockHeaders,
+          'X-API-Key': apiKey
         }
-      )
+      })
       expect(result).toEqual(mockResponse)
+    })
+
+    it('should upload to custom endpoint when provided', async () => {
+      const mockForm = new FormData()
+      const apiKey = 'test-api-key'
+      const customEndpoint = 'https://preview.gaffer.sh/api/upload'
+      const mockHeaders = { 'Content-Type': 'multipart/form-data' }
+
+      mockForm.getHeaders = jest.fn(() => mockHeaders)
+
+      const mockResponse = { data: { success: true } }
+      const post = axios.post as jest.Mock
+      post.mockResolvedValue(mockResponse)
+
+      await uploadToGaffer(mockForm, apiKey, customEndpoint)
+
+      expect(axios.post).toHaveBeenCalledWith(customEndpoint, mockForm, {
+        headers: {
+          ...mockHeaders,
+          'X-API-Key': apiKey
+        }
+      })
     })
 
     it('should handle upload errors', async () => {
       const mockForm = new FormData()
       const apiKey = 'test-api-key'
+      const apiEndpoint = 'https://app.gaffer.sh/api/upload'
       const mockError = new Error('Upload failed')
 
       // Mock getHeaders as a jest function instead of a method reference
@@ -119,9 +146,9 @@ describe('form-data-utils', () => {
       const post = axios.post as jest.Mock
       post.mockRejectedValue(mockError)
 
-      await expect(uploadToGaffer(mockForm, apiKey)).rejects.toThrow(
-        'Upload failed'
-      )
+      await expect(
+        uploadToGaffer(mockForm, apiKey, apiEndpoint)
+      ).rejects.toThrow('Upload failed')
     })
   })
 })

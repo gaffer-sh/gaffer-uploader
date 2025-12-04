@@ -2,7 +2,7 @@ import * as core from '@actions/core'
 import { run } from '../../src/main'
 import * as actionUtils from '../../src/utils/action-utils'
 import * as formDataUtils from '../../src/utils/form-data-utils'
-import { TestRunTag } from '../../src/types'
+import { TestRunTags } from '../../src/types'
 import FormData from 'form-data'
 import axios from 'axios'
 
@@ -22,12 +22,13 @@ describe('main', () => {
 
   it('should successfully upload report when all operations succeed', async () => {
     // Mock return values
-    const mockTags: TestRunTag[] = [{ key: 'commit_sha', value: 'abc123' }]
+    const mockTags: TestRunTags = { commitSha: 'abc123' }
     const mockForm = new FormData()
 
     mockedActionUtils.parseActionInputs.mockReturnValue({
       apiKey: 'test-key',
-      reportPath: 'test-path'
+      reportPath: 'test-path',
+      apiEndpoint: 'https://app.gaffer.sh/api/upload'
     })
     mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue(mockTags)
     mockedFormDataUtils.createUploadFormData.mockReturnValue(
@@ -48,7 +49,8 @@ describe('main', () => {
     )
     expect(mockedFormDataUtils.uploadToGaffer).toHaveBeenCalledWith(
       mockForm,
-      'test-key'
+      'test-key',
+      'https://app.gaffer.sh/api/upload'
     )
     expect(mockedCore.setOutput).toHaveBeenCalledWith('status', 'success')
     expect(mockedCore.setFailed).not.toHaveBeenCalled()
@@ -71,9 +73,10 @@ describe('main', () => {
     const error = new Error('Failed to create form data')
     mockedActionUtils.parseActionInputs.mockReturnValue({
       apiKey: 'test-key',
-      reportPath: 'test-path'
+      reportPath: 'test-path',
+      apiEndpoint: 'https://app.gaffer.sh/api/upload'
     })
-    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue([])
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
     mockedFormDataUtils.createUploadFormData.mockImplementation(() => {
       throw error
     })
@@ -89,9 +92,10 @@ describe('main', () => {
     const error = new Error('Upload failed')
     mockedActionUtils.parseActionInputs.mockReturnValue({
       apiKey: 'test-key',
-      reportPath: 'test-path'
+      reportPath: 'test-path',
+      apiEndpoint: 'https://app.gaffer.sh/api/upload'
     })
-    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue([])
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
     mockedFormDataUtils.createUploadFormData.mockReturnValue(new FormData())
     mockedFormDataUtils.uploadToGaffer.mockRejectedValue(error)
 

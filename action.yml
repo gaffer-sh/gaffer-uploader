@@ -13,6 +13,9 @@ inputs:
   report_path:
     description: 'Path to the relevant report file or directory to upload.'
     required: false
+  api_endpoint:
+    description: 'Custom API endpoint URL (for preview/staging environments).'
+    required: false
   commit_sha:
     description: 'Git commit SHA to associate with the test run report.'
     required: false

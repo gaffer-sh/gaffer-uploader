@@ -1,4 +1,6 @@
-export type TestRunTag = {
-  key: string
-  value: string
+export type TestRunTags = {
+  commitSha?: string
+  branch?: string
+  framework?: string
+  testSuite?: string
 }

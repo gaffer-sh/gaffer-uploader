@@ -4,9 +4,11 @@ import {
   parseActionInputs
 } from '../../../src/utils/action-utils'
 import {
+  API_ENDPOINT_VAR,
   BRANCH_VAR,
   COMMIT_SHA_VAR,
   GAFFER_API_KEY_VAR,
+  GAFFER_UPLOAD_BASE_URL,
   REPORT_PATH_VAR,
   TEST_FRAMEWORK_VAR,
   TEST_SUITE_VAR
@@ -23,16 +25,16 @@ describe('action-utils', () => {
   })
 
   describe('parseTestRunTagsFromInputs', () => {
-    it('should return empty array when no inputs are provided', () => {
+    it('should return empty object when no inputs are provided', () => {
       mockedCore.getInput.mockReturnValue('')
 
       const result = parseTestRunTagsFromInputs()
 
-      expect(result).toEqual([])
+      expect(result).toEqual({})
       expect(mockedCore.getInput).toHaveBeenCalledTimes(4)
     })
 
-    it('should return tags for all provided inputs', () => {
+    it('should return tags for all provided inputs with camelCase keys', () => {
       mockedCore.getInput.mockImplementation((name: string) => {
         const values: Record<string, string> = {
           [COMMIT_SHA_VAR]: 'abc123',
@@ -45,12 +47,12 @@ describe('action-utils', () => {
 
       const result = parseTestRunTagsFromInputs()
 
-      expect(result).toEqual([
-        { key: 'commit_sha', value: 'abc123' },
-        { key: 'branch', value: 'main' },
-        { key: 'test_framework', value: 'jest' },
-        { key: 'test_suite', value: 'unit' }
-      ])
+      expect(result).toEqual({
+        commitSha: 'abc123',
+        branch: 'main',
+        framework: 'jest',
+        testSuite: 'unit'
+      })
     })
 
     it('should only return tags for non-empty inputs', () => {
@@ -65,19 +67,20 @@ describe('action-utils', () => {
 
       const result = parseTestRunTagsFromInputs()
 
-      expect(result).toEqual([
-        { key: 'commit_sha', value: 'abc123' },
-        { key: 'test_framework', value: 'jest' }
-      ])
+      expect(result).toEqual({
+        commitSha: 'abc123',
+        framework: 'jest'
+      })
     })
   })
 
   describe('parseActionInputs', () => {
-    it('should return api key and report path when both are provided', () => {
+    it('should return api key, report path, and default endpoint when provided', () => {
       mockedCore.getInput.mockImplementation((name: string) => {
         const values: Record<string, string> = {
           [GAFFER_API_KEY_VAR]: 'test-api-key',
-          [REPORT_PATH_VAR]: './reports/test.xml'
+          [REPORT_PATH_VAR]: './reports/test.xml',
+          [API_ENDPOINT_VAR]: ''
         }
         return values[name] || ''
       })
@@ -86,7 +89,27 @@ describe('action-utils', () => {
 
       expect(result).toEqual({
         apiKey: 'test-api-key',
-        reportPath: './reports/test.xml'
+        reportPath: './reports/test.xml',
+        apiEndpoint: GAFFER_UPLOAD_BASE_URL
+      })
+    })
+
+    it('should use custom api endpoint when provided', () => {
+      mockedCore.getInput.mockImplementation((name: string) => {
+        const values: Record<string, string> = {
+          [GAFFER_API_KEY_VAR]: 'test-api-key',
+          [REPORT_PATH_VAR]: './reports/test.xml',
+          [API_ENDPOINT_VAR]: 'https://preview.gaffer.sh/api/upload'
+        }
+        return values[name] || ''
+      })
+
+      const result = parseActionInputs()
+
+      expect(result).toEqual({
+        apiKey: 'test-api-key',
+        reportPath: './reports/test.xml',
+        apiEndpoint: 'https://preview.gaffer.sh/api/upload'
       })
     })
 
