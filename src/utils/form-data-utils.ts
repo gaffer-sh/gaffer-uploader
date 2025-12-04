@@ -1,32 +1,28 @@
 import FormData from 'form-data'
-import { TestRunTag } from '../types'
+import { TestRunTags } from '../types'
 import * as fs from 'fs'
 import * as path from 'path'
 import axios from 'axios'
-import { GAFFER_UPLOAD_BASE_URL } from '../constants'
 
 /**
- * Creates and populates a FormData object with file(s) and tags
+ * Creates and populates a FormData object with file(s) and tags for v2 API
  */
 export function createUploadFormData(
   filePath: string,
-  testRunTags: TestRunTag[]
+  testRunTags: TestRunTags
 ): FormData {
   const form = new FormData()
 
   if (fs.statSync(filePath).isDirectory()) {
     addFilesToFormData(filePath, form)
   } else {
-    form.append('run_package', fs.createReadStream(filePath), {
+    form.append('files', fs.createReadStream(filePath), {
       filepath: path.basename(filePath)
     })
   }
 
-  // Add tags to form data
-  for (const tag of testRunTags) {
-    form.append('tags.key', tag.key)
-    form.append('tags.value', tag.value)
-  }
+  // Add tags as JSON string for v2 API
+  form.append('tags', JSON.stringify(testRunTags))
 
   return form
 }
@@ -50,7 +46,7 @@ function addFilesToFormData(
         addFilesToFormData(filePath, form, baseFolderPath)
       } else {
         const relativePath = path.relative(baseFolderPath, filePath)
-        form.append('run_package', fs.createReadStream(filePath), {
+        form.append('files', fs.createReadStream(filePath), {
           filepath: relativePath
         })
       }
@@ -61,16 +57,17 @@ function addFilesToFormData(
 }
 
 /**
- * Uploads form data to Gaffer API
+ * Uploads form data to Gaffer v2 API
  */
 export async function uploadToGaffer(
   form: FormData,
-  apiKey: string
+  apiKey: string,
+  apiEndpoint: string
 ): Promise<axios.AxiosResponse> {
   const headers = {
     ...form.getHeaders(),
-    'X-Gaffer-API-Key': apiKey
+    'X-API-Key': apiKey
   }
 
-  return axios.post(GAFFER_UPLOAD_BASE_URL, form, { headers })
+  return axios.post(apiEndpoint, form, { headers })
 }

@@ -8,9 +8,9 @@ import {
 
 export async function run(): Promise<void> {
   try {
-    const { apiKey, reportPath } = parseActionInputs()
+    const { apiKey, reportPath, apiEndpoint } = parseActionInputs()
     const form = createUploadFormData(reportPath, parseTestRunTagsFromInputs())
-    await uploadToGaffer(form, apiKey)
+    await uploadToGaffer(form, apiKey, apiEndpoint)
     core.setOutput('status', 'success')
   } catch (error: unknown) {
     core.setFailed(
