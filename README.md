@@ -50,7 +50,7 @@ For more examples, visit the
     merge-multiple: true
 
 - name: Gaffer Upload
-  uses: gaffer-sh/gaffer-uploader@v1
+  uses: gaffer-sh/gaffer-uploader@v0.3.0
   if: always()
   with:
     gaffer_api_key: ${{ secrets.GAFFER_API_KEY }}
@@ -67,7 +67,7 @@ For preview or staging environments, use the `api_endpoint` input:
 
 ```yaml
 - name: Gaffer Upload
-  uses: gaffer-sh/gaffer-uploader@v1
+  uses: gaffer-sh/gaffer-uploader@v0.3.0
   if: always()
   with:
     gaffer_api_key: ${{ secrets.GAFFER_API_KEY }}
