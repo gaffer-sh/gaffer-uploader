@@ -27,8 +27,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js
         id: setup-node
@@ -46,7 +44,7 @@ jobs:
         uses: super-linter/super-linter/slim@v7
         env:
           DEFAULT_BRANCH: main
-          FILTER_REGEX_EXCLUDE: dist/**/*|jest\.config\.js
+          FILTER_REGEX_EXCLUDE: dist/**/*|jest\.config\.js|pnpm-lock\.yaml
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_ALL_CODEBASE: true
           VALIDATE_JAVASCRIPT_STANDARD: false
