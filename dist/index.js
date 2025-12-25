@@ -30253,10 +30253,11 @@ module.exports = {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.TEST_SUITE_VAR = exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.API_ENDPOINT_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_BASE_URL = void 0;
+exports.TEST_SUITE_VAR = exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.API_ENDPOINT_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_TOKEN_VAR = exports.GAFFER_UPLOAD_BASE_URL = void 0;
 // Gaffer Constants
 exports.GAFFER_UPLOAD_BASE_URL = 'https://app.gaffer.sh/api/upload';
-exports.GAFFER_API_KEY_VAR = 'gaffer_api_key';
+exports.GAFFER_UPLOAD_TOKEN_VAR = 'gaffer_upload_token';
+exports.GAFFER_API_KEY_VAR = 'gaffer_api_key'; // Deprecated - kept for backward compatibility
 exports.REPORT_PATH_VAR = 'report_path';
 exports.API_ENDPOINT_VAR = 'api_endpoint';
 // Available Test Report Tags
@@ -30398,11 +30399,21 @@ function parseTestRunTagsFromInputs() {
     return tags;
 }
 function parseActionInputs() {
-    const apiKey = core.getInput(constants_1.GAFFER_API_KEY_VAR);
+    const uploadToken = core.getInput(constants_1.GAFFER_UPLOAD_TOKEN_VAR);
+    const legacyApiKey = core.getInput(constants_1.GAFFER_API_KEY_VAR);
     const reportPath = core.getInput(constants_1.REPORT_PATH_VAR);
     const apiEndpoint = core.getInput(constants_1.API_ENDPOINT_VAR) || constants_1.GAFFER_UPLOAD_BASE_URL;
-    if (!apiKey) {
-        throw new Error('Gaffer API key not provided.');
+    // Support both gaffer_upload_token (preferred) and gaffer_api_key (deprecated)
+    let apiKey;
+    if (uploadToken) {
+        apiKey = uploadToken;
+    }
+    else if (legacyApiKey) {
+        core.warning('gaffer_api_key is deprecated. Please use gaffer_upload_token instead.');
+        apiKey = legacyApiKey;
+    }
+    else {
+        throw new Error('Upload token not provided. Set the gaffer_upload_token input.');
     }
     if (!reportPath) {
         throw new Error('Report path not provided.');

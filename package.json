@@ -28,7 +28,8 @@
     "package": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
     "package:watch": "pnpm run package -- --watch",
     "test": "jest",
-    "all": "pnpm run format:write && pnpm run lint && pnpm run test && pnpm run coverage && pnpm run package"
+    "all": "pnpm run format:write && pnpm run lint && pnpm run test && pnpm run coverage && pnpm run package",
+    "release": "bumpp --tag 'v%s' --commit 'chore: release v%s'"
   },
   "license": "MIT",
   "dependencies": {
@@ -40,6 +41,7 @@
     "form-data": "^4.0.0"
   },
   "devDependencies": {
+    "bumpp": "^10.1.0",
     "@jest/globals": "^29.7.0",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.12.12",
