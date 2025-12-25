@@ -7,9 +7,16 @@ branding:
   color: 'blue'
 
 inputs:
+  gaffer_upload_token:
+    description: 'Upload token for your Gaffer project (gfr_ prefix)'
+    required: false
   gaffer_api_key:
-    description: 'Gaffer API key for your project.'
-    required: true
+    description:
+      '[DEPRECATED - use gaffer_upload_token] Upload token for your Gaffer
+      project'
+    required: false
+    deprecationMessage:
+      'gaffer_api_key is deprecated. Please use gaffer_upload_token instead.'
   report_path:
     description: 'Path to the relevant report file or directory to upload.'
     required: false

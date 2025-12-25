@@ -6,6 +6,7 @@ import {
   COMMIT_SHA_VAR,
   GAFFER_API_KEY_VAR,
   GAFFER_UPLOAD_BASE_URL,
+  GAFFER_UPLOAD_TOKEN_VAR,
   REPORT_PATH_VAR,
   TEST_FRAMEWORK_VAR,
   TEST_SUITE_VAR
@@ -52,13 +53,25 @@ export function parseActionInputs(): {
   reportPath: string
   apiEndpoint: string
 } {
-  const apiKey: string = core.getInput(GAFFER_API_KEY_VAR)
+  const uploadToken: string = core.getInput(GAFFER_UPLOAD_TOKEN_VAR)
+  const legacyApiKey: string = core.getInput(GAFFER_API_KEY_VAR)
   const reportPath: string = core.getInput(REPORT_PATH_VAR)
   const apiEndpoint: string =
     core.getInput(API_ENDPOINT_VAR) || GAFFER_UPLOAD_BASE_URL
 
-  if (!apiKey) {
-    throw new Error('Gaffer API key not provided.')
+  // Support both gaffer_upload_token (preferred) and gaffer_api_key (deprecated)
+  let apiKey: string
+  if (uploadToken) {
+    apiKey = uploadToken
+  } else if (legacyApiKey) {
+    core.warning(
+      'gaffer_api_key is deprecated. Please use gaffer_upload_token instead.'
+    )
+    apiKey = legacyApiKey
+  } else {
+    throw new Error(
+      'Upload token not provided. Set the gaffer_upload_token input.'
+    )
   }
 
   if (!reportPath) {
