@@ -3,6 +3,7 @@ import { TestRunTags } from '../types'
 import * as fs from 'fs'
 import * as path from 'path'
 import axios from 'axios'
+import { AXIOS_TIMEOUT_MS } from '../constants'
 
 /**
  * Creates and populates a FormData object with file(s) and tags for v2 API
@@ -69,5 +70,5 @@ export async function uploadToGaffer(
     'X-API-Key': apiKey
   }
 
-  return axios.post(apiEndpoint, form, { headers })
+  return axios.post(apiEndpoint, form, { headers, timeout: AXIOS_TIMEOUT_MS })
 }

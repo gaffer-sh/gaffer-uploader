@@ -107,7 +107,8 @@ describe('form-data-utils', () => {
         headers: {
           ...mockHeaders,
           'X-API-Key': apiKey
-        }
+        },
+        timeout: 30000
       })
       expect(result).toEqual(mockResponse)
     })
@@ -130,7 +131,8 @@ describe('form-data-utils', () => {
         headers: {
           ...mockHeaders,
           'X-API-Key': apiKey
-        }
+        },
+        timeout: 30000
       })
     })
 

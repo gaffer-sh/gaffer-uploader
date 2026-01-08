@@ -30253,9 +30253,10 @@ module.exports = {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.TEST_SUITE_VAR = exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.API_ENDPOINT_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_TOKEN_VAR = exports.GAFFER_UPLOAD_BASE_URL = void 0;
+exports.TEST_SUITE_VAR = exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.API_ENDPOINT_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_TOKEN_VAR = exports.AXIOS_TIMEOUT_MS = exports.GAFFER_UPLOAD_BASE_URL = void 0;
 // Gaffer Constants
 exports.GAFFER_UPLOAD_BASE_URL = 'https://app.gaffer.sh/api/upload';
+exports.AXIOS_TIMEOUT_MS = 30000;
 exports.GAFFER_UPLOAD_TOKEN_VAR = 'gaffer_upload_token';
 exports.GAFFER_API_KEY_VAR = 'gaffer_api_key'; // Deprecated - kept for backward compatibility
 exports.REPORT_PATH_VAR = 'report_path';
@@ -30472,6 +30473,7 @@ const form_data_1 = __importDefault(__nccwpck_require__(2031));
 const fs = __importStar(__nccwpck_require__(9896));
 const path = __importStar(__nccwpck_require__(6928));
 const axios_1 = __importDefault(__nccwpck_require__(7455));
+const constants_1 = __nccwpck_require__(5851);
 /**
  * Creates and populates a FormData object with file(s) and tags for v2 API
  */
@@ -30521,7 +30523,7 @@ async function uploadToGaffer(form, apiKey, apiEndpoint) {
         ...form.getHeaders(),
         'X-API-Key': apiKey
     };
-    return axios_1.default.post(apiEndpoint, form, { headers });
+    return axios_1.default.post(apiEndpoint, form, { headers, timeout: constants_1.AXIOS_TIMEOUT_MS });
 }
 
 
