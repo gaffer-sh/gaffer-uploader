@@ -37,6 +37,17 @@ inputs:
       'Optional name of the test suite to associate with the test run report.'
     required: false
 
+outputs:
+  status:
+    description: 'Upload status. "success" when the upload completed.'
+  run_id:
+    description: 'The unique identifier for the uploaded test run.'
+  report_url:
+    description: 'Direct URL to the test run report on Gaffer.'
+  result:
+    description:
+      'Full JSON response from the Gaffer API for maximum flexibility.'
+
 runs:
-  using: node20
+  using: node24
   main: dist/index.js

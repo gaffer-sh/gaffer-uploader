@@ -1,5 +1,5 @@
 import FormData from 'form-data'
-import { TestRunTags } from '../types'
+import { GafferUploadResponse, TestRunTags } from '../types'
 import * as fs from 'fs'
 import * as path from 'path'
 import axios from 'axios'
@@ -64,7 +64,7 @@ export async function uploadToGaffer(
   form: FormData,
   apiKey: string,
   apiEndpoint: string
-): Promise<axios.AxiosResponse> {
+): Promise<axios.AxiosResponse<GafferUploadResponse>> {
   const headers = {
     ...form.getHeaders(),
     'X-API-Key': apiKey

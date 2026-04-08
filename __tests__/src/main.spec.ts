@@ -34,9 +34,12 @@ describe('main', () => {
     mockedFormDataUtils.createUploadFormData.mockReturnValue(
       mockForm as unknown as FormData
     )
-    mockedFormDataUtils.uploadToGaffer.mockResolvedValue(
-      {} as axios.AxiosResponse
-    )
+    mockedFormDataUtils.uploadToGaffer.mockResolvedValue({
+      data: {
+        runId: 'run-123',
+        reportUrl: 'https://app.gaffer.sh/runs/run-123'
+      }
+    } as axios.AxiosResponse)
 
     await run()
 
@@ -53,6 +56,11 @@ describe('main', () => {
       'https://app.gaffer.sh/api/upload'
     )
     expect(mockedCore.setOutput).toHaveBeenCalledWith('status', 'success')
+    expect(mockedCore.setOutput).toHaveBeenCalledWith('run_id', 'run-123')
+    expect(mockedCore.setOutput).toHaveBeenCalledWith(
+      'report_url',
+      'https://app.gaffer.sh/runs/run-123'
+    )
     expect(mockedCore.setFailed).not.toHaveBeenCalled()
   })
 

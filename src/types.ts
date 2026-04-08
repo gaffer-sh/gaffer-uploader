@@ -4,3 +4,9 @@ export type TestRunTags = {
   framework?: string
   testSuite?: string
 }
+
+export type GafferUploadResponse = {
+  runId?: string
+  reportUrl?: string
+  status?: string
+}
