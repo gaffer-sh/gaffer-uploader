@@ -1,6 +1,10 @@
 import FormData from 'form-data'
 import * as fs from 'fs'
 import axios from 'axios'
+import axiosRetry, {
+  exponentialDelay,
+  isNetworkOrIdempotentRequestError
+} from 'axios-retry'
 
 import { TestRunTags } from '../../../src/types'
 import {
@@ -12,6 +16,7 @@ import {
 jest.mock('form-data')
 jest.mock('fs')
 jest.mock('axios')
+jest.mock('axios-retry')
 
 describe('form-data-utils', () => {
   let mockAppend: jest.Mock
@@ -87,23 +92,28 @@ describe('form-data-utils', () => {
   })
 
   describe('uploadToGaffer', () => {
+    let mockPost: jest.Mock
+
+    beforeEach(() => {
+      mockPost = jest.fn()
+      ;(axios.create as jest.Mock).mockReturnValue({ post: mockPost })
+      ;(axiosRetry as unknown as jest.Mock).mockImplementation(() => {})
+    })
+
     it('should upload form data with correct headers to specified endpoint', async () => {
       const mockForm = new FormData()
       const apiKey = 'test-api-key'
       const apiEndpoint = 'https://app.gaffer.sh/api/upload'
       const mockHeaders = { 'Content-Type': 'multipart/form-data' }
 
-      // Mock getHeaders as a jest function instead of a method reference
       mockForm.getHeaders = jest.fn(() => mockHeaders)
 
-      // Mock axios.post successful response
       const mockResponse = { data: { success: true } }
-      const post = axios.post as jest.Mock
-      post.mockResolvedValue(mockResponse)
+      mockPost.mockResolvedValue(mockResponse)
 
       const result = await uploadToGaffer(mockForm, apiKey, apiEndpoint)
 
-      expect(axios.post).toHaveBeenCalledWith(apiEndpoint, mockForm, {
+      expect(mockPost).toHaveBeenCalledWith(apiEndpoint, mockForm, {
         headers: {
           ...mockHeaders,
           'X-API-Key': apiKey
@@ -122,12 +132,11 @@ describe('form-data-utils', () => {
       mockForm.getHeaders = jest.fn(() => mockHeaders)
 
       const mockResponse = { data: { success: true } }
-      const post = axios.post as jest.Mock
-      post.mockResolvedValue(mockResponse)
+      mockPost.mockResolvedValue(mockResponse)
 
       await uploadToGaffer(mockForm, apiKey, customEndpoint)
 
-      expect(axios.post).toHaveBeenCalledWith(customEndpoint, mockForm, {
+      expect(mockPost).toHaveBeenCalledWith(customEndpoint, mockForm, {
         headers: {
           ...mockHeaders,
           'X-API-Key': apiKey
@@ -142,15 +151,64 @@ describe('form-data-utils', () => {
       const apiEndpoint = 'https://app.gaffer.sh/api/upload'
       const mockError = new Error('Upload failed')
 
-      // Mock getHeaders as a jest function instead of a method reference
       mockForm.getHeaders = jest.fn(() => ({}))
 
-      const post = axios.post as jest.Mock
-      post.mockRejectedValue(mockError)
+      mockPost.mockRejectedValue(mockError)
 
       await expect(
         uploadToGaffer(mockForm, apiKey, apiEndpoint)
       ).rejects.toThrow('Upload failed')
+    })
+
+    it('should configure axios-retry with correct options', async () => {
+      const mockForm = new FormData()
+      mockForm.getHeaders = jest.fn(() => ({}))
+      mockPost.mockResolvedValue({ data: {} })
+
+      await uploadToGaffer(mockForm, 'key', 'https://api.test.com')
+
+      expect(axios.create).toHaveBeenCalled()
+      expect(axiosRetry).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          retries: 3,
+          retryDelay: exponentialDelay
+        })
+      )
+    })
+
+    it('should retry on 429 rate limit errors', async () => {
+      const mockForm = new FormData()
+      mockForm.getHeaders = jest.fn(() => ({}))
+      mockPost.mockResolvedValue({ data: {} })
+
+      await uploadToGaffer(mockForm, 'key', 'https://api.test.com')
+
+      // Extract the retryCondition function from the axiosRetry call
+      const retryConfig = (axiosRetry as unknown as jest.Mock).mock.calls[0][1]
+      const retryCondition = retryConfig.retryCondition
+
+      const error429 = { response: { status: 429 }, isAxiosError: true }
+      expect(retryCondition(error429)).toBe(true)
+    })
+
+    it('should not retry on 401 auth errors', async () => {
+      const mockForm = new FormData()
+      mockForm.getHeaders = jest.fn(() => ({}))
+      mockPost.mockResolvedValue({ data: {} })
+
+      // Mock isNetworkOrIdempotentRequestError to return false for client errors
+      ;(
+        isNetworkOrIdempotentRequestError as unknown as jest.Mock
+      ).mockReturnValue(false)
+
+      await uploadToGaffer(mockForm, 'key', 'https://api.test.com')
+
+      const retryConfig = (axiosRetry as unknown as jest.Mock).mock.calls[0][1]
+      const retryCondition = retryConfig.retryCondition
+
+      const error401 = { response: { status: 401 }, isAxiosError: true }
+      expect(retryCondition(error401)).toBe(false)
     })
   })
 })

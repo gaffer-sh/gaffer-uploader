@@ -3,7 +3,11 @@ import { GafferUploadResponse, TestRunTags } from '../types'
 import * as fs from 'fs'
 import * as path from 'path'
 import axios from 'axios'
-import { AXIOS_TIMEOUT_MS } from '../constants'
+import axiosRetry, {
+  exponentialDelay,
+  isNetworkOrIdempotentRequestError
+} from 'axios-retry'
+import { AXIOS_TIMEOUT_MS, MAX_UPLOAD_RETRIES } from '../constants'
 
 /**
  * Creates and populates a FormData object with file(s) and tags for v2 API
@@ -70,5 +74,22 @@ export async function uploadToGaffer(
     'X-API-Key': apiKey
   }
 
-  return axios.post(apiEndpoint, form, { headers, timeout: AXIOS_TIMEOUT_MS })
+  const client = axios.create()
+  axiosRetry(client, {
+    retries: MAX_UPLOAD_RETRIES,
+    retryDelay: exponentialDelay,
+    retryCondition: error => {
+      return (
+        isNetworkOrIdempotentRequestError(error) ||
+        error.response?.status === 429
+      )
+    },
+    onRetry: (retryCount, error) => {
+      console.log(
+        `Upload attempt ${retryCount} failed (${error.message}), retrying...`
+      )
+    }
+  })
+
+  return client.post(apiEndpoint, form, { headers, timeout: AXIOS_TIMEOUT_MS })
 }
