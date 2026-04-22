@@ -36,17 +36,23 @@ inputs:
     description:
       'Optional name of the test suite to associate with the test run report.'
     required: false
+  upload_timeout:
+    description: 'Upload timeout in seconds. Defaults to 30.'
+    required: false
+    default: '30'
+  max_file_size_mb:
+    description:
+      'Maximum size of any individual file to upload, in MB. Defaults to 100.'
+    required: false
+    default: '100'
+  debug:
+    description: 'Enable debug logging, including full API responses.'
+    required: false
+    default: 'false'
 
 outputs:
   status:
     description: 'Upload status. "success" when the upload completed.'
-  run_id:
-    description: 'The unique identifier for the uploaded test run.'
-  report_url:
-    description: 'Direct URL to the test run report on Gaffer.'
-  result:
-    description:
-      'Full JSON response from the Gaffer API for maximum flexibility.'
 
 runs:
   using: node24

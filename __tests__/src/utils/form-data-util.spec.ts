@@ -40,9 +40,11 @@ describe('form-data-utils', () => {
       branch: 'main'
     }
 
+    const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024 // 100 MB default
+
     it('should create form data with a single file and JSON tags', () => {
       // Mock fs.statSync to return file stats
-      const mockStats = { isDirectory: () => false }
+      const mockStats = { isDirectory: () => false, size: 1024 }
       const statSync = fs.statSync as jest.Mock
       statSync.mockReturnValue(mockStats)
 
@@ -52,7 +54,7 @@ describe('form-data-utils', () => {
       createReadStream.mockReturnValue(mockReadStream)
 
       const filePath = '/path/to/file.zip'
-      createUploadFormData(filePath, mockTags)
+      createUploadFormData(filePath, mockTags, MAX_FILE_SIZE_BYTES)
 
       expect(FormData).toHaveBeenCalled()
       expect(mockAppend).toHaveBeenNthCalledWith(1, 'files', mockReadStream, {
@@ -67,8 +69,8 @@ describe('form-data-utils', () => {
 
     it('should create form data with multiple files from directory', () => {
       // Mock fs.statSync to return directory stats for the main path
-      const mockDirStats = { isDirectory: () => true }
-      const mockFileStats = { isDirectory: () => false }
+      const mockDirStats = { isDirectory: () => true, size: 0 }
+      const mockFileStats = { isDirectory: () => false, size: 512 }
       const statSync = fs.statSync as jest.Mock
       statSync.mockReturnValueOnce(mockDirStats).mockReturnValue(mockFileStats)
 
@@ -83,11 +85,39 @@ describe('form-data-utils', () => {
       createReadStream.mockReturnValue(mockReadStream)
 
       const dirPath = '/path/to/dir'
-      createUploadFormData(dirPath, mockTags)
+      createUploadFormData(dirPath, mockTags, MAX_FILE_SIZE_BYTES)
 
       expect(FormData).toHaveBeenCalled()
       expect(fs.readdirSync).toHaveBeenCalledWith(dirPath)
       expect(mockAppend).toHaveBeenCalledTimes(3) // 2 files + 1 JSON tags entry
+    })
+
+    it('should throw when a single file exceeds maxFileSizeBytes', () => {
+      const oversizedStats = {
+        isDirectory: () => false,
+        size: 200 * 1024 * 1024
+      }
+      ;(fs.statSync as jest.Mock).mockReturnValue(oversizedStats)
+
+      expect(() =>
+        createUploadFormData('/path/to/huge.zip', mockTags, MAX_FILE_SIZE_BYTES)
+      ).toThrow(/exceeds the 100 MB limit/)
+    })
+
+    it('should throw when a file in a directory exceeds maxFileSizeBytes', () => {
+      const mockDirStats = { isDirectory: () => true, size: 0 }
+      const oversizedStats = {
+        isDirectory: () => false,
+        size: 200 * 1024 * 1024
+      }
+      ;(fs.statSync as jest.Mock)
+        .mockReturnValueOnce(mockDirStats)
+        .mockReturnValue(oversizedStats)
+      ;(fs.readdirSync as jest.Mock).mockReturnValue(['huge.bin'])
+
+      expect(() =>
+        createUploadFormData('/path/to/dir', mockTags, MAX_FILE_SIZE_BYTES)
+      ).toThrow(/exceeds the 100 MB limit/)
     })
   })
 
@@ -111,7 +141,7 @@ describe('form-data-utils', () => {
       const mockResponse = { data: { success: true } }
       mockPost.mockResolvedValue(mockResponse)
 
-      const result = await uploadToGaffer(mockForm, apiKey, apiEndpoint)
+      const result = await uploadToGaffer(mockForm, apiKey, apiEndpoint, 30000)
 
       expect(mockPost).toHaveBeenCalledWith(apiEndpoint, mockForm, {
         headers: {
@@ -134,14 +164,14 @@ describe('form-data-utils', () => {
       const mockResponse = { data: { success: true } }
       mockPost.mockResolvedValue(mockResponse)
 
-      await uploadToGaffer(mockForm, apiKey, customEndpoint)
+      await uploadToGaffer(mockForm, apiKey, customEndpoint, 60000)
 
       expect(mockPost).toHaveBeenCalledWith(customEndpoint, mockForm, {
         headers: {
           ...mockHeaders,
           'X-API-Key': apiKey
         },
-        timeout: 30000
+        timeout: 60000
       })
     })
 

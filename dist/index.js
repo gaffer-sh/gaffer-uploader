@@ -30184,7 +30184,7 @@ module.exports = {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.TEST_SUITE_VAR = exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.API_ENDPOINT_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_TOKEN_VAR = exports.MAX_UPLOAD_RETRIES = exports.AXIOS_TIMEOUT_MS = exports.GAFFER_UPLOAD_BASE_URL = void 0;
+exports.TEST_SUITE_VAR = exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.DEFAULT_MAX_FILE_SIZE_MB = exports.DEFAULT_TIMEOUT_SECONDS = exports.MAX_FILE_SIZE_VAR = exports.UPLOAD_TIMEOUT_VAR = exports.API_ENDPOINT_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_TOKEN_VAR = exports.MAX_UPLOAD_RETRIES = exports.AXIOS_TIMEOUT_MS = exports.GAFFER_UPLOAD_BASE_URL = void 0;
 // Gaffer Constants
 exports.GAFFER_UPLOAD_BASE_URL = 'https://app.gaffer.sh/api/upload';
 exports.AXIOS_TIMEOUT_MS = 30000;
@@ -30193,6 +30193,11 @@ exports.GAFFER_UPLOAD_TOKEN_VAR = 'gaffer_upload_token';
 exports.GAFFER_API_KEY_VAR = 'gaffer_api_key'; // Deprecated - kept for backward compatibility
 exports.REPORT_PATH_VAR = 'report_path';
 exports.API_ENDPOINT_VAR = 'api_endpoint';
+exports.UPLOAD_TIMEOUT_VAR = 'upload_timeout';
+exports.MAX_FILE_SIZE_VAR = 'max_file_size_mb';
+// Defaults
+exports.DEFAULT_TIMEOUT_SECONDS = 30;
+exports.DEFAULT_MAX_FILE_SIZE_MB = 100;
 // Available Test Report Tags
 exports.COMMIT_SHA_VAR = 'commit_sha';
 exports.BRANCH_VAR = 'branch';
@@ -30247,15 +30252,10 @@ const form_data_utils_1 = __nccwpck_require__(6653);
 const action_utils_1 = __nccwpck_require__(3320);
 async function run() {
     try {
-        const { apiKey, reportPath, apiEndpoint } = (0, action_utils_1.parseActionInputs)();
-        const form = (0, form_data_utils_1.createUploadFormData)(reportPath, (0, action_utils_1.parseTestRunTagsFromInputs)());
-        const response = await (0, form_data_utils_1.uploadToGaffer)(form, apiKey, apiEndpoint);
-        const data = response.data ?? {};
+        const { apiKey, reportPath, apiEndpoint, timeoutMs, maxFileSizeBytes } = (0, action_utils_1.parseActionInputs)();
+        const form = (0, form_data_utils_1.createUploadFormData)(reportPath, (0, action_utils_1.parseTestRunTagsFromInputs)(), maxFileSizeBytes);
+        await (0, form_data_utils_1.uploadToGaffer)(form, apiKey, apiEndpoint, timeoutMs);
         core.setOutput('status', 'success');
-        if (data.runId)
-            core.setOutput('run_id', data.runId);
-        if (data.reportUrl)
-            core.setOutput('report_url', data.reportUrl);
     }
     catch (error) {
         core.setFailed(error instanceof Error ? error.message : 'An unexpected error occurred');
@@ -30341,6 +30341,8 @@ function parseActionInputs() {
     const legacyApiKey = core.getInput(constants_1.GAFFER_API_KEY_VAR);
     const reportPath = core.getInput(constants_1.REPORT_PATH_VAR);
     const apiEndpoint = core.getInput(constants_1.API_ENDPOINT_VAR) || constants_1.GAFFER_UPLOAD_BASE_URL;
+    const timeoutSeconds = parseInt(core.getInput(constants_1.UPLOAD_TIMEOUT_VAR), 10) || constants_1.DEFAULT_TIMEOUT_SECONDS;
+    const maxFileSizeMb = parseInt(core.getInput(constants_1.MAX_FILE_SIZE_VAR), 10) || constants_1.DEFAULT_MAX_FILE_SIZE_MB;
     // Support both gaffer_upload_token (preferred) and gaffer_api_key (deprecated)
     let apiKey;
     if (uploadToken) {
@@ -30356,7 +30358,13 @@ function parseActionInputs() {
     if (!reportPath) {
         throw new Error('Report path not provided.');
     }
-    return { apiKey, reportPath, apiEndpoint };
+    return {
+        apiKey,
+        reportPath,
+        apiEndpoint,
+        timeoutMs: timeoutSeconds * 1000,
+        maxFileSizeBytes: maxFileSizeMb * 1024 * 1024
+    };
 }
 
 
@@ -30413,14 +30421,16 @@ const axios_1 = __importDefault(__nccwpck_require__(1864));
 const axios_retry_1 = __importStar(__nccwpck_require__(1232));
 const constants_1 = __nccwpck_require__(5851);
 /**
- * Creates and populates a FormData object with file(s) and tags for v2 API
+ * Creates and populates a FormData object with file(s) and tags for v2 API.
+ * Throws if any individual file exceeds maxFileSizeBytes.
  */
-function createUploadFormData(filePath, testRunTags) {
+function createUploadFormData(filePath, testRunTags, maxFileSizeBytes) {
     const form = new form_data_1.default();
     if (fs.statSync(filePath).isDirectory()) {
-        addFilesToFormData(filePath, form);
+        addFilesToFormData(filePath, form, maxFileSizeBytes);
     }
     else {
+        assertFileSizeWithinLimit(filePath, maxFileSizeBytes);
         form.append('files', fs.createReadStream(filePath), {
             filepath: path.basename(filePath)
         });
@@ -30430,18 +30440,30 @@ function createUploadFormData(filePath, testRunTags) {
     return form;
 }
 /**
+ * Throws if the file at filePath exceeds maxFileSizeBytes.
+ */
+function assertFileSizeWithinLimit(filePath, maxFileSizeBytes) {
+    const { size } = fs.statSync(filePath);
+    if (size > maxFileSizeBytes) {
+        const sizeMb = (size / (1024 * 1024)).toFixed(2);
+        const limitMb = (maxFileSizeBytes / (1024 * 1024)).toFixed(0);
+        throw new Error(`File "${path.basename(filePath)}" is ${sizeMb} MB, which exceeds the ${limitMb} MB limit.`);
+    }
+}
+/**
  * Recursively adds files from a directory to FormData
  */
-function addFilesToFormData(folderPath, form, baseFolderPath = folderPath) {
+function addFilesToFormData(folderPath, form, maxFileSizeBytes, baseFolderPath = folderPath) {
     try {
         const files = fs.readdirSync(folderPath);
         for (const file of files) {
             const filePath = path.join(folderPath, file);
             const fileStat = fs.statSync(filePath);
             if (fileStat.isDirectory()) {
-                addFilesToFormData(filePath, form, baseFolderPath);
+                addFilesToFormData(filePath, form, maxFileSizeBytes, baseFolderPath);
             }
             else {
+                assertFileSizeWithinLimit(filePath, maxFileSizeBytes);
                 const relativePath = path.relative(baseFolderPath, filePath);
                 form.append('files', fs.createReadStream(filePath), {
                     filepath: relativePath
@@ -30451,12 +30473,13 @@ function addFilesToFormData(folderPath, form, baseFolderPath = folderPath) {
     }
     catch (e) {
         console.error(e);
+        throw e;
     }
 }
 /**
  * Uploads form data to Gaffer v2 API
  */
-async function uploadToGaffer(form, apiKey, apiEndpoint) {
+async function uploadToGaffer(form, apiKey, apiEndpoint, timeoutMs = constants_1.AXIOS_TIMEOUT_MS) {
     const headers = {
         ...form.getHeaders(),
         'X-API-Key': apiKey
@@ -30473,7 +30496,7 @@ async function uploadToGaffer(form, apiKey, apiEndpoint) {
             console.log(`Upload attempt ${retryCount} failed (${error.message}), retrying...`);
         }
     });
-    return client.post(apiEndpoint, form, { headers, timeout: constants_1.AXIOS_TIMEOUT_MS });
+    return client.post(apiEndpoint, form, { headers, timeout: timeoutMs });
 }
 
 

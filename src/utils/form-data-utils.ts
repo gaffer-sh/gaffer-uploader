@@ -1,5 +1,5 @@
 import FormData from 'form-data'
-import { GafferUploadResponse, TestRunTags } from '../types'
+import { TestRunTags } from '../types'
 import * as fs from 'fs'
 import * as path from 'path'
 import axios from 'axios'
@@ -10,17 +10,20 @@ import axiosRetry, {
 import { AXIOS_TIMEOUT_MS, MAX_UPLOAD_RETRIES } from '../constants'
 
 /**
- * Creates and populates a FormData object with file(s) and tags for v2 API
+ * Creates and populates a FormData object with file(s) and tags for v2 API.
+ * Throws if any individual file exceeds maxFileSizeBytes.
  */
 export function createUploadFormData(
   filePath: string,
-  testRunTags: TestRunTags
+  testRunTags: TestRunTags,
+  maxFileSizeBytes: number
 ): FormData {
   const form = new FormData()
 
   if (fs.statSync(filePath).isDirectory()) {
-    addFilesToFormData(filePath, form)
+    addFilesToFormData(filePath, form, maxFileSizeBytes)
   } else {
+    assertFileSizeWithinLimit(filePath, maxFileSizeBytes)
     form.append('files', fs.createReadStream(filePath), {
       filepath: path.basename(filePath)
     })
@@ -33,11 +36,29 @@ export function createUploadFormData(
 }
 
 /**
+ * Throws if the file at filePath exceeds maxFileSizeBytes.
+ */
+function assertFileSizeWithinLimit(
+  filePath: string,
+  maxFileSizeBytes: number
+): void {
+  const { size } = fs.statSync(filePath)
+  if (size > maxFileSizeBytes) {
+    const sizeMb = (size / (1024 * 1024)).toFixed(2)
+    const limitMb = (maxFileSizeBytes / (1024 * 1024)).toFixed(0)
+    throw new Error(
+      `File "${path.basename(filePath)}" is ${sizeMb} MB, which exceeds the ${limitMb} MB limit.`
+    )
+  }
+}
+
+/**
  * Recursively adds files from a directory to FormData
  */
 function addFilesToFormData(
   folderPath: string,
   form: FormData,
+  maxFileSizeBytes: number,
   baseFolderPath: string = folderPath
 ): void {
   try {
@@ -48,8 +69,9 @@ function addFilesToFormData(
       const fileStat = fs.statSync(filePath)
 
       if (fileStat.isDirectory()) {
-        addFilesToFormData(filePath, form, baseFolderPath)
+        addFilesToFormData(filePath, form, maxFileSizeBytes, baseFolderPath)
       } else {
+        assertFileSizeWithinLimit(filePath, maxFileSizeBytes)
         const relativePath = path.relative(baseFolderPath, filePath)
         form.append('files', fs.createReadStream(filePath), {
           filepath: relativePath
@@ -58,6 +80,7 @@ function addFilesToFormData(
     }
   } catch (e) {
     console.error(e)
+    throw e
   }
 }
 
@@ -67,8 +90,9 @@ function addFilesToFormData(
 export async function uploadToGaffer(
   form: FormData,
   apiKey: string,
-  apiEndpoint: string
-): Promise<axios.AxiosResponse<GafferUploadResponse>> {
+  apiEndpoint: string,
+  timeoutMs: number = AXIOS_TIMEOUT_MS
+): Promise<axios.AxiosResponse> {
   const headers = {
     ...form.getHeaders(),
     'X-API-Key': apiKey
@@ -91,5 +115,5 @@ export async function uploadToGaffer(
     }
   })
 
-  return client.post(apiEndpoint, form, { headers, timeout: AXIOS_TIMEOUT_MS })
+  return client.post(apiEndpoint, form, { headers, timeout: timeoutMs })
 }

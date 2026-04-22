@@ -8,14 +8,24 @@ import {
 
 export async function run(): Promise<void> {
   try {
-    const { apiKey, reportPath, apiEndpoint } = parseActionInputs()
-    const form = createUploadFormData(reportPath, parseTestRunTagsFromInputs())
-    const response = await uploadToGaffer(form, apiKey, apiEndpoint)
-    const data = response.data ?? {}
-
+    const {
+      apiKey,
+      reportPath,
+      apiEndpoint,
+      timeoutMs,
+      maxFileSizeBytes,
+      debug
+    } = parseActionInputs()
+    const form = createUploadFormData(
+      reportPath,
+      parseTestRunTagsFromInputs(),
+      maxFileSizeBytes
+    )
+    const response = await uploadToGaffer(form, apiKey, apiEndpoint, timeoutMs)
+    if (debug) {
+      core.info(`[debug] API response: ${JSON.stringify(response.data)}`)
+    }
     core.setOutput('status', 'success')
-    if (data.runId) core.setOutput('run_id', data.runId)
-    if (data.reportUrl) core.setOutput('report_url', data.reportUrl)
   } catch (error: unknown) {
     core.setFailed(
       error instanceof Error ? error.message : 'An unexpected error occurred'
