@@ -30184,7 +30184,7 @@ module.exports = {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.TEST_SUITE_VAR = exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.DEFAULT_MAX_FILE_SIZE_MB = exports.DEFAULT_TIMEOUT_SECONDS = exports.MAX_FILE_SIZE_VAR = exports.UPLOAD_TIMEOUT_VAR = exports.API_ENDPOINT_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_TOKEN_VAR = exports.MAX_UPLOAD_RETRIES = exports.AXIOS_TIMEOUT_MS = exports.GAFFER_UPLOAD_BASE_URL = void 0;
+exports.TEST_SUITE_VAR = exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.DEFAULT_MAX_FILE_SIZE_MB = exports.DEFAULT_TIMEOUT_SECONDS = exports.DEBUG_VAR = exports.MAX_FILE_SIZE_VAR = exports.UPLOAD_TIMEOUT_VAR = exports.API_ENDPOINT_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_TOKEN_VAR = exports.MAX_UPLOAD_RETRIES = exports.AXIOS_TIMEOUT_MS = exports.GAFFER_UPLOAD_BASE_URL = void 0;
 // Gaffer Constants
 exports.GAFFER_UPLOAD_BASE_URL = 'https://app.gaffer.sh/api/upload';
 exports.AXIOS_TIMEOUT_MS = 30000;
@@ -30195,6 +30195,7 @@ exports.REPORT_PATH_VAR = 'report_path';
 exports.API_ENDPOINT_VAR = 'api_endpoint';
 exports.UPLOAD_TIMEOUT_VAR = 'upload_timeout';
 exports.MAX_FILE_SIZE_VAR = 'max_file_size_mb';
+exports.DEBUG_VAR = 'debug';
 // Defaults
 exports.DEFAULT_TIMEOUT_SECONDS = 30;
 exports.DEFAULT_MAX_FILE_SIZE_MB = 100;
@@ -30252,9 +30253,12 @@ const form_data_utils_1 = __nccwpck_require__(6653);
 const action_utils_1 = __nccwpck_require__(3320);
 async function run() {
     try {
-        const { apiKey, reportPath, apiEndpoint, timeoutMs, maxFileSizeBytes } = (0, action_utils_1.parseActionInputs)();
+        const { apiKey, reportPath, apiEndpoint, timeoutMs, maxFileSizeBytes, debug } = (0, action_utils_1.parseActionInputs)();
         const form = (0, form_data_utils_1.createUploadFormData)(reportPath, (0, action_utils_1.parseTestRunTagsFromInputs)(), maxFileSizeBytes);
-        await (0, form_data_utils_1.uploadToGaffer)(form, apiKey, apiEndpoint, timeoutMs);
+        const response = await (0, form_data_utils_1.uploadToGaffer)(form, apiKey, apiEndpoint, timeoutMs);
+        if (debug) {
+            core.info(`[debug] API response: ${JSON.stringify(response.data)}`);
+        }
         core.setOutput('status', 'success');
     }
     catch (error) {
@@ -30343,6 +30347,7 @@ function parseActionInputs() {
     const apiEndpoint = core.getInput(constants_1.API_ENDPOINT_VAR) || constants_1.GAFFER_UPLOAD_BASE_URL;
     const timeoutSeconds = parseInt(core.getInput(constants_1.UPLOAD_TIMEOUT_VAR), 10) || constants_1.DEFAULT_TIMEOUT_SECONDS;
     const maxFileSizeMb = parseInt(core.getInput(constants_1.MAX_FILE_SIZE_VAR), 10) || constants_1.DEFAULT_MAX_FILE_SIZE_MB;
+    const debug = core.getInput(constants_1.DEBUG_VAR) === 'true';
     // Support both gaffer_upload_token (preferred) and gaffer_api_key (deprecated)
     let apiKey;
     if (uploadToken) {
@@ -30363,7 +30368,8 @@ function parseActionInputs() {
         reportPath,
         apiEndpoint,
         timeoutMs: timeoutSeconds * 1000,
-        maxFileSizeBytes: maxFileSizeMb * 1024 * 1024
+        maxFileSizeBytes: maxFileSizeMb * 1024 * 1024,
+        debug
     };
 }
 
