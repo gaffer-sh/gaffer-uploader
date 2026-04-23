@@ -1,0 +1,7 @@
+# zizmor configuration. https://docs.zizmor.sh/configuration/
+rules:
+  cache-poisoning:
+    ignore:
+      # The release workflow only fires on tag pushes from main; no untrusted
+      # PR can poison setup-node's tool cache before a release runs.
+      - release.yml
