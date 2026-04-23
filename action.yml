@@ -53,6 +53,10 @@ inputs:
 outputs:
   status:
     description: 'Upload status. "success" when the upload completed.'
+  test_run_id:
+    description: 'Gaffer upload session / test run ID.'
+  project_id:
+    description: 'Gaffer project ID that received the upload.'
 
 runs:
   using: node24

@@ -1,13 +1,14 @@
-import FormData from 'form-data'
-import { TestRunTags } from '../types'
-import * as fs from 'fs'
-import * as path from 'path'
+import * as core from '@actions/core'
 import axios from 'axios'
 import axiosRetry, {
   exponentialDelay,
   isNetworkOrIdempotentRequestError
 } from 'axios-retry'
+import FormData from 'form-data'
+import * as fs from 'fs'
+import * as path from 'path'
 import { AXIOS_TIMEOUT_MS, MAX_UPLOAD_RETRIES } from '../constants'
+import { TestRunTags } from '../types'
 
 /**
  * Creates and populates a FormData object with file(s) and tags for v2 API.
@@ -79,7 +80,7 @@ function addFilesToFormData(
       }
     }
   } catch (e) {
-    console.error(e)
+    core.warning(e instanceof Error ? e : String(e))
     throw e
   }
 }
@@ -105,11 +106,12 @@ export async function uploadToGaffer(
     retryCondition: error => {
       return (
         isNetworkOrIdempotentRequestError(error) ||
-        error.response?.status === 429
+        error.response?.status === 429 ||
+        (error.response?.status ?? 0) >= 500
       )
     },
     onRetry: (retryCount, error) => {
-      console.log(
+      core.info(
         `Upload attempt ${retryCount} failed (${error.message}), retrying...`
       )
     }

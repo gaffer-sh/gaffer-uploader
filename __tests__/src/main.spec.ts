@@ -37,9 +37,11 @@ describe('main', () => {
     mockedFormDataUtils.createUploadFormData.mockReturnValue(
       mockForm as unknown as FormData
     )
-    mockedFormDataUtils.uploadToGaffer.mockResolvedValue(
-      {} as axios.AxiosResponse
-    )
+    mockedFormDataUtils.uploadToGaffer.mockResolvedValue({
+      data: {
+        uploadSession: { id: 'upl_abc', projectId: 'prj_xyz' }
+      }
+    } as axios.AxiosResponse)
 
     await run()
 
@@ -57,9 +59,78 @@ describe('main', () => {
       'https://app.gaffer.sh/api/upload',
       30000
     )
+    expect(mockedCore.setOutput).toHaveBeenCalledWith('test_run_id', 'upl_abc')
+    expect(mockedCore.setOutput).toHaveBeenCalledWith('project_id', 'prj_xyz')
     expect(mockedCore.setOutput).toHaveBeenCalledWith('status', 'success')
     expect(mockedCore.setFailed).not.toHaveBeenCalled()
     expect(mockedCore.info).not.toHaveBeenCalled()
+  })
+
+  it('should fall back to testRun field when uploadSession is absent', async () => {
+    const mockForm = new FormData()
+
+    mockedActionUtils.parseActionInputs.mockReturnValue({
+      apiKey: 'test-key',
+      reportPath: 'test-path',
+      apiEndpoint: 'https://app.gaffer.sh/api/upload',
+      timeoutMs: 30000,
+      maxFileSizeBytes: 104857600,
+      debug: false
+    })
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
+    mockedFormDataUtils.createUploadFormData.mockReturnValue(
+      mockForm as unknown as FormData
+    )
+    mockedFormDataUtils.uploadToGaffer.mockResolvedValue({
+      data: {
+        testRun: { id: 'upl_legacy', projectId: 'prj_legacy' }
+      }
+    } as axios.AxiosResponse)
+
+    await run()
+
+    expect(mockedCore.setOutput).toHaveBeenCalledWith(
+      'test_run_id',
+      'upl_legacy'
+    )
+    expect(mockedCore.setOutput).toHaveBeenCalledWith(
+      'project_id',
+      'prj_legacy'
+    )
+    expect(mockedCore.setOutput).toHaveBeenCalledWith('status', 'success')
+  })
+
+  it('should still set status when response has no session fields', async () => {
+    const mockForm = new FormData()
+
+    mockedActionUtils.parseActionInputs.mockReturnValue({
+      apiKey: 'test-key',
+      reportPath: 'test-path',
+      apiEndpoint: 'https://app.gaffer.sh/api/upload',
+      timeoutMs: 30000,
+      maxFileSizeBytes: 104857600,
+      debug: false
+    })
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
+    mockedFormDataUtils.createUploadFormData.mockReturnValue(
+      mockForm as unknown as FormData
+    )
+    mockedFormDataUtils.uploadToGaffer.mockResolvedValue({
+      data: {}
+    } as axios.AxiosResponse)
+
+    await run()
+
+    expect(mockedCore.setOutput).not.toHaveBeenCalledWith(
+      'test_run_id',
+      expect.anything()
+    )
+    expect(mockedCore.setOutput).not.toHaveBeenCalledWith(
+      'project_id',
+      expect.anything()
+    )
+    expect(mockedCore.setOutput).toHaveBeenCalledWith('status', 'success')
+    expect(mockedCore.setFailed).not.toHaveBeenCalled()
   })
 
   it('should log API response when debug is enabled', async () => {

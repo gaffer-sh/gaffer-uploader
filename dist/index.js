@@ -30259,6 +30259,11 @@ async function run() {
         if (debug) {
             core.info(`[debug] API response: ${JSON.stringify(response.data)}`);
         }
+        const session = response.data?.uploadSession ?? response.data?.testRun;
+        if (session?.id)
+            core.setOutput('test_run_id', session.id);
+        if (session?.projectId)
+            core.setOutput('project_id', session.projectId);
         core.setOutput('status', 'success');
     }
     catch (error) {
@@ -30420,11 +30425,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.createUploadFormData = createUploadFormData;
 exports.uploadToGaffer = uploadToGaffer;
+const core = __importStar(__nccwpck_require__(6966));
+const axios_1 = __importDefault(__nccwpck_require__(1864));
+const axios_retry_1 = __importStar(__nccwpck_require__(1232));
 const form_data_1 = __importDefault(__nccwpck_require__(2031));
 const fs = __importStar(__nccwpck_require__(9896));
 const path = __importStar(__nccwpck_require__(6928));
-const axios_1 = __importDefault(__nccwpck_require__(1864));
-const axios_retry_1 = __importStar(__nccwpck_require__(1232));
 const constants_1 = __nccwpck_require__(5851);
 /**
  * Creates and populates a FormData object with file(s) and tags for v2 API.
@@ -30478,7 +30484,7 @@ function addFilesToFormData(folderPath, form, maxFileSizeBytes, baseFolderPath =
         }
     }
     catch (e) {
-        console.error(e);
+        core.warning(e instanceof Error ? e : String(e));
         throw e;
     }
 }
@@ -30496,10 +30502,11 @@ async function uploadToGaffer(form, apiKey, apiEndpoint, timeoutMs = constants_1
         retryDelay: axios_retry_1.exponentialDelay,
         retryCondition: error => {
             return ((0, axios_retry_1.isNetworkOrIdempotentRequestError)(error) ||
-                error.response?.status === 429);
+                error.response?.status === 429 ||
+                (error.response?.status ?? 0) >= 500);
         },
         onRetry: (retryCount, error) => {
-            console.log(`Upload attempt ${retryCount} failed (${error.message}), retrying...`);
+            core.info(`Upload attempt ${retryCount} failed (${error.message}), retrying...`);
         }
     });
     return client.post(apiEndpoint, form, { headers, timeout: timeoutMs });

@@ -1,10 +1,10 @@
-import FormData from 'form-data'
-import * as fs from 'fs'
 import axios from 'axios'
 import axiosRetry, {
   exponentialDelay,
   isNetworkOrIdempotentRequestError
 } from 'axios-retry'
+import FormData from 'form-data'
+import * as fs from 'fs'
 
 import { TestRunTags } from '../../../src/types'
 import {
@@ -14,7 +14,20 @@ import {
 
 // Mock external dependencies
 jest.mock('form-data')
-jest.mock('fs')
+
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  statSync: jest.fn(),
+  readdirSync: jest.fn(),
+  createReadStream: jest.fn()
+}))
+
+jest.mock('@actions/core', () => ({
+  info: jest.fn(),
+  warning: jest.fn(),
+  error: jest.fn()
+}))
+
 jest.mock('axios')
 jest.mock('axios-retry')
 
@@ -220,6 +233,23 @@ describe('form-data-utils', () => {
 
       const error429 = { response: { status: 429 }, isAxiosError: true }
       expect(retryCondition(error429)).toBe(true)
+    })
+
+    it('should retry on 5xx server errors', async () => {
+      const mockForm = new FormData()
+      mockForm.getHeaders = jest.fn(() => ({}))
+      mockPost.mockResolvedValue({ data: {} })
+      ;(
+        isNetworkOrIdempotentRequestError as unknown as jest.Mock
+      ).mockReturnValue(false)
+
+      await uploadToGaffer(mockForm, 'key', 'https://api.test.com')
+
+      const retryConfig = (axiosRetry as unknown as jest.Mock).mock.calls[0][1]
+      const retryCondition = retryConfig.retryCondition
+
+      const error503 = { response: { status: 503 }, isAxiosError: true }
+      expect(retryCondition(error503)).toBe(true)
     })
 
     it('should not retry on 401 auth errors', async () => {

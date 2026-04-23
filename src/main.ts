@@ -25,6 +25,10 @@ export async function run(): Promise<void> {
     if (debug) {
       core.info(`[debug] API response: ${JSON.stringify(response.data)}`)
     }
+
+    const session = response.data?.uploadSession ?? response.data?.testRun
+    if (session?.id) core.setOutput('test_run_id', session.id)
+    if (session?.projectId) core.setOutput('project_id', session.projectId)
     core.setOutput('status', 'success')
   } catch (error: unknown) {
     core.setFailed(
