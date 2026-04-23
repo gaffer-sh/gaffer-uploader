@@ -8,9 +8,27 @@ import {
 
 export async function run(): Promise<void> {
   try {
-    const { apiKey, reportPath, apiEndpoint } = parseActionInputs()
-    const form = createUploadFormData(reportPath, parseTestRunTagsFromInputs())
-    await uploadToGaffer(form, apiKey, apiEndpoint)
+    const {
+      apiKey,
+      reportPath,
+      apiEndpoint,
+      timeoutMs,
+      maxFileSizeBytes,
+      debug
+    } = parseActionInputs()
+    const form = createUploadFormData(
+      reportPath,
+      parseTestRunTagsFromInputs(),
+      maxFileSizeBytes
+    )
+    const response = await uploadToGaffer(form, apiKey, apiEndpoint, timeoutMs)
+    if (debug) {
+      core.info(`[debug] API response: ${JSON.stringify(response.data)}`)
+    }
+
+    const session = response.data?.uploadSession ?? response.data?.testRun
+    if (session?.id) core.setOutput('test_run_id', session.id)
+    if (session?.projectId) core.setOutput('project_id', session.projectId)
     core.setOutput('status', 'success')
   } catch (error: unknown) {
     core.setFailed(

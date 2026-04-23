@@ -7,12 +7,15 @@ import {
   API_ENDPOINT_VAR,
   BRANCH_VAR,
   COMMIT_SHA_VAR,
+  DEBUG_VAR,
   GAFFER_API_KEY_VAR,
   GAFFER_UPLOAD_BASE_URL,
   GAFFER_UPLOAD_TOKEN_VAR,
+  MAX_FILE_SIZE_VAR,
   REPORT_PATH_VAR,
   TEST_FRAMEWORK_VAR,
-  TEST_SUITE_VAR
+  TEST_SUITE_VAR,
+  UPLOAD_TIMEOUT_VAR
 } from '../../../src/constants'
 
 // Mock @actions/core
@@ -92,7 +95,10 @@ describe('action-utils', () => {
       expect(result).toEqual({
         apiKey: 'gfr_test-upload-token',
         reportPath: './reports/test.xml',
-        apiEndpoint: GAFFER_UPLOAD_BASE_URL
+        apiEndpoint: GAFFER_UPLOAD_BASE_URL,
+        timeoutMs: 30000,
+        maxFileSizeBytes: 104857600,
+        debug: false
       })
       expect(mockedCore.warning).not.toHaveBeenCalled()
     })
@@ -113,7 +119,10 @@ describe('action-utils', () => {
       expect(result).toEqual({
         apiKey: 'test-api-key',
         reportPath: './reports/test.xml',
-        apiEndpoint: GAFFER_UPLOAD_BASE_URL
+        apiEndpoint: GAFFER_UPLOAD_BASE_URL,
+        timeoutMs: 30000,
+        maxFileSizeBytes: 104857600,
+        debug: false
       })
       expect(mockedCore.warning).toHaveBeenCalledWith(
         'gaffer_api_key is deprecated. Please use gaffer_upload_token instead.'
@@ -136,7 +145,10 @@ describe('action-utils', () => {
       expect(result).toEqual({
         apiKey: 'gfr_preferred-token',
         reportPath: './reports/test.xml',
-        apiEndpoint: GAFFER_UPLOAD_BASE_URL
+        apiEndpoint: GAFFER_UPLOAD_BASE_URL,
+        timeoutMs: 30000,
+        maxFileSizeBytes: 104857600,
+        debug: false
       })
       expect(mockedCore.warning).not.toHaveBeenCalled()
     })
@@ -157,8 +169,51 @@ describe('action-utils', () => {
       expect(result).toEqual({
         apiKey: 'gfr_test-token',
         reportPath: './reports/test.xml',
-        apiEndpoint: 'https://preview.gaffer.sh/api/upload'
+        apiEndpoint: 'https://preview.gaffer.sh/api/upload',
+        timeoutMs: 30000,
+        maxFileSizeBytes: 104857600,
+        debug: false
       })
+    })
+
+    it('should use custom upload timeout and file size when provided', () => {
+      mockedCore.getInput.mockImplementation((name: string) => {
+        const values: Record<string, string> = {
+          [GAFFER_UPLOAD_TOKEN_VAR]: 'gfr_test-token',
+          [GAFFER_API_KEY_VAR]: '',
+          [REPORT_PATH_VAR]: './reports/test.xml',
+          [API_ENDPOINT_VAR]: '',
+          [UPLOAD_TIMEOUT_VAR]: '60',
+          [MAX_FILE_SIZE_VAR]: '50'
+        }
+        return values[name] || ''
+      })
+
+      const result = parseActionInputs()
+
+      expect(result).toEqual({
+        apiKey: 'gfr_test-token',
+        reportPath: './reports/test.xml',
+        apiEndpoint: GAFFER_UPLOAD_BASE_URL,
+        timeoutMs: 60000,
+        maxFileSizeBytes: 52428800,
+        debug: false
+      })
+    })
+
+    it('should enable debug when debug input is true', () => {
+      mockedCore.getInput.mockImplementation((name: string) => {
+        const values: Record<string, string> = {
+          [GAFFER_UPLOAD_TOKEN_VAR]: 'gfr_test-token',
+          [REPORT_PATH_VAR]: './reports/test.xml',
+          [DEBUG_VAR]: 'true'
+        }
+        return values[name] || ''
+      })
+
+      const result = parseActionInputs()
+
+      expect(result.debug).toBe(true)
     })
 
     it('should throw error when neither upload token nor api key is provided', () => {
