@@ -19,6 +19,17 @@ updates:
     cooldown:
       default-days: 7
       semver-major-days: 14
+    ignore:
+      # @actions/core v2+ is ESM-only; this repo bundles via @vercel/ncc to
+      # CJS. Adopting requires a full ESM migration (tsconfig, jest, ncc).
+      - dependency-name: '@actions/core'
+        update-types:
+          - version-update:semver-major
+      # eslint-plugin-github v5+ requires @typescript-eslint v8 and the
+      # eslint v9 flat config. Cascading bump out of scope here.
+      - dependency-name: eslint-plugin-github
+        update-types:
+          - version-update:semver-major
     groups:
       npm-development:
         dependency-type: development
