@@ -9,12 +9,16 @@ import {
 } from '../../../src/utils/cli-install'
 
 describe('resolveTarget', () => {
+  // Must match the asset names published by gaffer-sh/gaffer's release-cli.yml.
+  // If that pipeline ever switches naming conventions, this table is the
+  // canary that flags the resulting release-asset 404s in unit tests instead
+  // of in production CI runs.
   const supported: [string, string, string][] = [
-    ['linux', 'x64', 'linux-amd64'],
-    ['linux', 'arm64', 'linux-arm64'],
-    ['darwin', 'x64', 'darwin-amd64'],
-    ['darwin', 'arm64', 'darwin-arm64'],
-    ['win32', 'x64', 'windows-amd64']
+    ['linux', 'x64', 'x86_64-unknown-linux-gnu'],
+    ['linux', 'arm64', 'aarch64-unknown-linux-gnu'],
+    ['darwin', 'x64', 'x86_64-apple-darwin'],
+    ['darwin', 'arm64', 'aarch64-apple-darwin'],
+    ['win32', 'x64', 'x86_64-pc-windows-gnu']
   ]
 
   test.each(supported)('maps %s/%s to %s', (platform, arch, expected) => {
@@ -96,33 +100,37 @@ describe('readExpectedSha256', () => {
 
   it('extracts the sha for a matching filename', () => {
     const filePath = writeChecksums(
-      'aaaa  gaffer-linux-arm64.tar.gz\nbbbb  gaffer-linux-amd64.tar.gz\n'
+      'aaaa  gaffer-aarch64-unknown-linux-gnu.tar.gz\nbbbb  gaffer-x86_64-unknown-linux-gnu.tar.gz\n'
     )
-    expect(readExpectedSha256(filePath, 'gaffer-linux-amd64.tar.gz')).toBe(
-      'bbbb'
-    )
+    expect(
+      readExpectedSha256(filePath, 'gaffer-x86_64-unknown-linux-gnu.tar.gz')
+    ).toBe('bbbb')
   })
 
   it('accepts the binary-mode "*filename" form sha256sum can emit', () => {
-    const filePath = writeChecksums('cccc *gaffer-darwin-arm64.tar.gz\n')
-    expect(readExpectedSha256(filePath, 'gaffer-darwin-arm64.tar.gz')).toBe(
-      'cccc'
+    const filePath = writeChecksums(
+      'cccc *gaffer-aarch64-apple-darwin.tar.gz\n'
     )
+    expect(
+      readExpectedSha256(filePath, 'gaffer-aarch64-apple-darwin.tar.gz')
+    ).toBe('cccc')
   })
 
   it('throws when the requested filename is absent', () => {
-    const filePath = writeChecksums('aaaa  gaffer-linux-amd64.tar.gz\n')
+    const filePath = writeChecksums(
+      'aaaa  gaffer-x86_64-unknown-linux-gnu.tar.gz\n'
+    )
     expect(() =>
-      readExpectedSha256(filePath, 'gaffer-windows-amd64.tar.gz')
-    ).toThrow(/No checksum entry for gaffer-windows-amd64\.tar\.gz/)
+      readExpectedSha256(filePath, 'gaffer-x86_64-pc-windows-gnu.tar.gz')
+    ).toThrow(/No checksum entry for gaffer-x86_64-pc-windows-gnu\.tar\.gz/)
   })
 
   it('skips blank lines and tolerates extra whitespace', () => {
     const filePath = writeChecksums(
-      '\n\n   abcd    gaffer-linux-amd64.tar.gz   \n\n'
+      '\n\n   abcd    gaffer-x86_64-unknown-linux-gnu.tar.gz   \n\n'
     )
-    expect(readExpectedSha256(filePath, 'gaffer-linux-amd64.tar.gz')).toBe(
-      'abcd'
-    )
+    expect(
+      readExpectedSha256(filePath, 'gaffer-x86_64-unknown-linux-gnu.tar.gz')
+    ).toBe('abcd')
   })
 })

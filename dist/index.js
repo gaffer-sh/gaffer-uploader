@@ -28644,7 +28644,7 @@ const VERSION_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
 async function installCli(requestedVersion) {
     const version = normalizeVersion(requestedVersion);
     const target = resolveTarget(os.platform(), os.arch());
-    const binaryName = target.startsWith('windows-') ? 'gaffer.exe' : 'gaffer';
+    const binaryName = target.includes('windows') ? 'gaffer.exe' : 'gaffer';
     const cachedDir = tc.find('gaffer', version, target);
     if (cachedDir) {
         core.info(`Using cached gaffer ${version} (${target}) from ${cachedDir}`);
@@ -28684,15 +28684,31 @@ function normalizeVersion(requestedVersion) {
     }
     return raw;
 }
+/**
+ * Maps Node's platform/arch to the exact Rust target triple the
+ * gaffer-sh/gaffer release pipeline names its tarballs after — see
+ * .github/workflows/release-cli.yml in that repo. The string returned here
+ * is interpolated directly into the release-asset URL and looked up in
+ * checksums.txt, so it MUST match the published asset name byte-for-byte
+ * (e.g. `gaffer-x86_64-unknown-linux-gnu.tar.gz`).
+ */
 function resolveTarget(platform, arch) {
     const targets = {
-        linux: { x64: 'linux-amd64', arm64: 'linux-arm64' },
-        darwin: { x64: 'darwin-amd64', arm64: 'darwin-arm64' },
-        win32: { x64: 'windows-amd64' }
+        linux: {
+            x64: 'x86_64-unknown-linux-gnu',
+            arm64: 'aarch64-unknown-linux-gnu'
+        },
+        darwin: {
+            x64: 'x86_64-apple-darwin',
+            arm64: 'aarch64-apple-darwin'
+        },
+        win32: {
+            x64: 'x86_64-pc-windows-gnu'
+        }
     };
     const target = targets[platform]?.[arch];
     if (!target) {
-        throw new Error(`Unsupported runner: ${platform}/${arch}. Supported targets: linux-amd64, linux-arm64, darwin-amd64, darwin-arm64, windows-amd64. ` +
+        throw new Error(`Unsupported runner: ${platform}/${arch}. Supported targets: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin, x86_64-pc-windows-gnu. ` +
             `Pin uses: gaffer-sh/gaffer-uploader@v1 for the TypeScript implementation that runs anywhere with Node.`);
     }
     return target;
