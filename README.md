@@ -131,8 +131,8 @@ Exit codes:
 ```sh
 pnpm install
 pnpm test          # unit tests (jest)
-pnpm run bundle    # rebuild dist/ via @vercel/ncc — required before any commit that touches src/
-pnpm run all       # full pre-PR pass: format + lint + test + coverage badge + bundle
+pnpm run bundle    # rebuild dist/ via @vercel/ncc; required after any src/ change
+pnpm run all       # full pre-PR pass: format + lint + test + coverage + bundle
 ```
 
 The committed `dist/index.js` is the runtime artifact GitHub Actions executes.
@@ -141,12 +141,12 @@ CI (`check-dist.yml`) fails any PR whose `dist/` is out of sync with `src/`.
 ## Releasing
 
 1. Land your `src/` changes; rebuild `dist/` and commit.
-2. Run `pnpm run release`, pick the new version (e.g. `2.0.0`). `bumpp` bumps
+1. Run `pnpm run release`, pick the new version (e.g. `2.0.0`). `bumpp` bumps
    `package.json`, commits, and tags `vX.Y.Z`.
-3. The release workflow auto-creates a GitHub Release with generated notes.
-4. Update the major-version alias so `@v2` resolves to the new release:
+1. The release workflow auto-creates a GitHub Release with generated notes.
+1. Update the major-version alias so `@v2` resolves to the new release:
    `git tag -f v2 vX.Y.Z && git push -f origin v2`.
-5. For the first release in a new major, manually publish to GitHub Marketplace
+1. For the first release in a new major, manually publish to GitHub Marketplace
    from the Release UI ("Publish this Action to the GitHub Marketplace").
    Subsequent same-major releases auto-republish.
 
