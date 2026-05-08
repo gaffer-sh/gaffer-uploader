@@ -28266,6 +28266,9 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.run = run;
+exports.buildCliArgs = buildCliArgs;
+exports.redactToken = redactToken;
+exports.parseEnvelope = parseEnvelope;
 /**
  * Action entrypoint for gaffer-uploader v2.
  *
@@ -28279,6 +28282,8 @@ const core = __importStar(__nccwpck_require__(6966));
 const child_process_1 = __nccwpck_require__(7698);
 const action_utils_1 = __nccwpck_require__(3320);
 const cli_install_1 = __nccwpck_require__(3996);
+/** Bytes of stderr we keep around to surface back through `core.setFailed`. */
+const STDERR_TAIL_BYTES = 8192;
 async function run() {
     try {
         const inputs = (0, action_utils_1.parseActionInputs)();
@@ -28292,39 +28297,62 @@ async function run() {
         if (inputs.debug) {
             core.info(`[debug] invoking: gaffer upload ${redactToken(args).join(' ')}`);
         }
-        const result = (0, child_process_1.spawnSync)(binaryPath, ['upload', ...args], {
-            stdio: ['ignore', 'pipe', 'inherit'],
-            encoding: 'utf-8'
-        });
-        if (result.error) {
-            core.setFailed(`Failed to invoke gaffer CLI: ${result.error.message}`);
+        const result = await runCli(binaryPath, args);
+        if (result.spawnError) {
+            core.setFailed(`Failed to invoke gaffer CLI: ${result.spawnError.message}`);
             return;
         }
-        if (result.status !== 0) {
-            core.setFailed(`gaffer upload exited with code ${result.status ?? 'unknown'}`);
+        if (inputs.debug && result.stdout) {
+            core.info(`[debug] CLI stdout:\n${result.stdout}`);
+        }
+        const envelope = parseEnvelope(result.stdout, result.stderr);
+        if (result.exitCode === 0) {
+            handleSuccessExit(envelope, result);
             return;
         }
-        const stdout = result.stdout ?? '';
-        if (inputs.debug) {
-            core.info(`[debug] CLI stdout:\n${stdout}`);
-        }
-        const success = parseSuccessLine(stdout);
-        if (success?.uploadSessionId) {
-            core.setOutput('test_run_id', success.uploadSessionId);
-        }
-        if (success?.projectId) {
-            core.setOutput('project_id', success.projectId);
-        }
-        core.setOutput('status', 'success');
+        handleFailureExit(envelope, result);
     }
     catch (error) {
         core.setFailed(error instanceof Error ? error.message : 'An unexpected error occurred');
     }
 }
+function handleSuccessExit(envelope, result) {
+    if (!envelope || envelope.status !== 'success') {
+        // The CLI returned 0 without emitting a recognizable success envelope.
+        // Flag it loudly — silently setting status=success risks downstream
+        // steps consuming an empty test_run_id and failing far from the cause.
+        const tail = lastLines(result.stderr, 5) || lastLines(result.stdout, 5);
+        const advice = 'gaffer upload exited 0 but did not emit a success envelope. ' +
+            'This usually means a CLI version mismatch. Pin `cli_version` to a known-good release.';
+        core.setFailed(tail ? `${advice} Recent output:\n${tail}` : advice);
+        return;
+    }
+    if (envelope.uploadSessionId) {
+        core.setOutput('test_run_id', envelope.uploadSessionId);
+    }
+    if (envelope.projectId) {
+        core.setOutput('project_id', envelope.projectId);
+    }
+    core.setOutput('status', 'success');
+}
+function handleFailureExit(envelope, result) {
+    const where = result.signal
+        ? `signal ${result.signal}`
+        : `exit code ${result.exitCode ?? 'unknown'}`;
+    if (envelope && envelope.status !== 'success' && envelope.message) {
+        const session = envelope.sessionId ? ` [session ${envelope.sessionId}]` : '';
+        const ray = envelope.rayId ? ` [ray ${envelope.rayId}]` : '';
+        core.setFailed(`gaffer upload failed (${where}): ${envelope.message}${session}${ray}`);
+        return;
+    }
+    const tail = lastLines(result.stderr, 5);
+    const base = `gaffer upload failed (${where}).`;
+    core.setFailed(tail ? `${base} Recent stderr:\n${tail}` : base);
+}
 function buildCliArgs(inputs, tags) {
-    // Strip the legacy "/api/upload" suffix from api_endpoint so the CLI's
-    // --api-url receives the bare dashboard URL it expects (e.g.
-    // https://app.gaffer.sh, not https://app.gaffer.sh/api/upload).
+    // v1 docs told users to pass `api_endpoint: https://app.gaffer.sh/api/upload`,
+    // but the CLI's --api-url expects the bare dashboard URL. Strip the legacy
+    // suffix so v1 → v2 migration works without users editing their workflow.
     const apiUrl = inputs.apiEndpoint.replace(/\/api\/upload\/?$/, '') ||
         'https://app.gaffer.sh';
     const args = [
@@ -28355,25 +28383,72 @@ function redactToken(args) {
     }
     return redacted;
 }
-function parseSuccessLine(stdout) {
-    // The CLI emits a single JSON line on success. Scan from the end so any
-    // human-readable noise emitted before the JSON line does not confuse us.
-    const lines = stdout
-        .split('\n')
-        .map(l => l.trim())
-        .filter(Boolean);
-    for (let i = lines.length - 1; i >= 0; i--) {
-        try {
-            const parsed = JSON.parse(lines[i]);
-            if (parsed && typeof parsed === 'object' && parsed.status === 'success') {
-                return parsed;
+function parseEnvelope(stdout, stderr) {
+    // Success envelopes go to stdout, error envelopes to stderr. Scan stdout
+    // first so a successful run isn't misclassified by stale stderr noise,
+    // newest line first within each stream.
+    for (const stream of [stdout, stderr]) {
+        const lines = stream
+            .split('\n')
+            .map(l => l.trim())
+            .filter(Boolean);
+        for (let i = lines.length - 1; i >= 0; i--) {
+            const line = lines[i];
+            if (!line.startsWith('{'))
+                continue;
+            try {
+                const parsed = JSON.parse(line);
+                if (parsed &&
+                    typeof parsed === 'object' &&
+                    'status' in parsed &&
+                    typeof parsed.status === 'string') {
+                    return parsed;
+                }
             }
-        }
-        catch {
-            continue;
+            catch {
+                continue;
+            }
         }
     }
     return null;
+}
+function lastLines(text, count) {
+    return text.split('\n').filter(Boolean).slice(-count).join('\n').trim();
+}
+async function runCli(binary, args) {
+    return new Promise(resolve => {
+        const child = (0, child_process_1.spawn)(binary, ['upload', ...args], {
+            stdio: ['ignore', 'pipe', 'pipe']
+        });
+        let stdout = '';
+        let stderrTail = '';
+        child.stdout.setEncoding('utf-8');
+        child.stdout.on('data', (chunk) => {
+            stdout += chunk;
+        });
+        child.stderr.setEncoding('utf-8');
+        child.stderr.on('data', (chunk) => {
+            // Tee live to the parent so users see progress in CI logs as it
+            // happens; keep a bounded tail for the final setFailed message.
+            process.stderr.write(chunk);
+            stderrTail += chunk;
+            if (stderrTail.length > STDERR_TAIL_BYTES) {
+                stderrTail = stderrTail.slice(stderrTail.length - STDERR_TAIL_BYTES);
+            }
+        });
+        child.on('error', (err) => {
+            resolve({
+                exitCode: null,
+                signal: null,
+                stdout,
+                stderr: stderrTail,
+                spawnError: err
+            });
+        });
+        child.on('close', (code, signal) => {
+            resolve({ exitCode: code, signal, stdout, stderr: stderrTail });
+        });
+    });
 }
 
 
@@ -28526,11 +28601,14 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.installCli = installCli;
+exports.normalizeVersion = normalizeVersion;
+exports.resolveTarget = resolveTarget;
+exports.readExpectedSha256 = readExpectedSha256;
 /**
  * Installs the `gaffer` CLI binary released from gaffer-sh/gaffer.
  *
- * The CLI is fully open source. Source, release pipeline, and signed
- * checksums all live in the public repo:
+ * The CLI is fully open source. Source, release pipeline, and
+ * sha256 checksums all live in the public repo:
  *   https://github.com/gaffer-sh/gaffer
  *
  * Specifically, the upload code this Action ends up running is in:
@@ -28540,9 +28618,12 @@ exports.installCli = installCli;
  * Release artifacts (tarballs + checksums.txt) are produced by:
  *   .github/workflows/release-cli.yml
  *
- * The download flow below is intentionally narrow: pinned version tag,
- * sha256-verified tarball, no post-install hooks, GITHUB_TOKEN-authed
- * download to lift the anonymous rate limit.
+ * Trust boundary: the only thing this module guarantees is that the
+ * downloaded tarball's bytes match the sha256 line in the release's
+ * checksums.txt. Tarball and checksums.txt are both fetched from the same
+ * GitHub release asset URL — an attacker who tampers the release can swap
+ * both. Cosign / minisign signing is not yet wired up; revisit when we
+ * publish the public signing key.
  */
 const core = __importStar(__nccwpck_require__(6966));
 const tc = __importStar(__nccwpck_require__(5440));
@@ -28552,14 +28633,16 @@ const os = __importStar(__nccwpck_require__(857));
 const path = __importStar(__nccwpck_require__(6928));
 const CLI_REPO = 'gaffer-sh/gaffer';
 /**
- * Default CLI version installed when the action input `cli_version` is empty.
- * Bump alongside any v2.x.x release that depends on a newer CLI feature.
- * Pinning by default keeps the Action deterministic; users can opt into a
- * newer CLI without waiting for a v2.x.x release by setting `cli_version`.
+ * Default CLI version installed when `cli_version` input is empty.
+ * Last verified against `cli-v0.4.0` (TASK-49). Bump alongside any v2.x.x
+ * release that depends on a newer CLI feature; pinning by default keeps
+ * the Action deterministic.
  */
 const DEFAULT_CLI_VERSION = '0.4.0';
+/** Conservative semver subset, matches `1.2.3` and `1.2.3-alpha.1`. */
+const VERSION_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
 async function installCli(requestedVersion) {
-    const version = (requestedVersion ?? DEFAULT_CLI_VERSION).replace(/^v/, '');
+    const version = normalizeVersion(requestedVersion);
     const target = resolveTarget(os.platform(), os.arch());
     const binaryName = target.startsWith('windows-') ? 'gaffer.exe' : 'gaffer';
     const cachedDir = tc.find('gaffer', version, target);
@@ -28576,20 +28659,30 @@ async function installCli(requestedVersion) {
         ? `token ${process.env.GITHUB_TOKEN}`
         : undefined;
     core.info(`Downloading ${tarballUrl}`);
-    const tarballPath = await tc.downloadTool(tarballUrl, undefined, auth);
-    const checksumsPath = await tc.downloadTool(checksumsUrl, undefined, auth);
+    const tarballPath = await downloadWithContext(tarballUrl, `gaffer ${version} (${target}) tarball`, auth);
+    const checksumsPath = await downloadWithContext(checksumsUrl, `gaffer ${version} checksums.txt`, auth);
     const expectedSha = readExpectedSha256(checksumsPath, tarballName);
     const actualSha = await sha256(tarballPath);
     if (expectedSha !== actualSha) {
-        throw new Error(`SHA256 mismatch for ${tarballName}: expected ${expectedSha}, got ${actualSha}`);
+        throw new Error(`SHA256 mismatch for ${tarballName}: expected ${expectedSha}, got ${actualSha}. ` +
+            `Refusing to install. Verify the release at https://github.com/${CLI_REPO}/releases/tag/${tag}.`);
     }
     const extracted = await tc.extractTar(tarballPath);
     const binaryDir = locateBinaryDir(extracted, binaryName);
-    fs.chmodSync(path.join(binaryDir, binaryName), 0o755);
+    if (os.platform() !== 'win32') {
+        fs.chmodSync(path.join(binaryDir, binaryName), 0o755);
+    }
     const cachedRoot = await tc.cacheDir(binaryDir, 'gaffer', version, target);
     core.addPath(cachedRoot);
     core.info(`Installed gaffer ${version} (${target}) to ${cachedRoot}`);
     return { binaryPath: path.join(cachedRoot, binaryName), version };
+}
+function normalizeVersion(requestedVersion) {
+    const raw = (requestedVersion ?? DEFAULT_CLI_VERSION).replace(/^v/, '').trim();
+    if (!VERSION_PATTERN.test(raw)) {
+        throw new Error(`Invalid cli_version "${requestedVersion}". Expected semver like "0.4.0" or "0.4.0-rc.1".`);
+    }
+    return raw;
 }
 function resolveTarget(platform, arch) {
     const targets = {
@@ -28618,7 +28711,8 @@ function readExpectedSha256(checksumsPath, filename) {
         if (file === filename || file === `*${filename}`)
             return sum;
     }
-    throw new Error(`No checksum entry for ${filename} in checksums.txt`);
+    throw new Error(`No checksum entry for ${filename} in ${checksumsPath}. ` +
+        `The release may be missing this asset or checksums.txt is malformed.`);
 }
 function locateBinaryDir(extractRoot, binaryName) {
     if (fs.existsSync(path.join(extractRoot, binaryName))) {
@@ -28633,6 +28727,16 @@ function locateBinaryDir(extractRoot, binaryName) {
             return sub;
     }
     throw new Error(`Extracted archive ${extractRoot} does not contain ${binaryName}`);
+}
+async function downloadWithContext(url, label, auth) {
+    try {
+        return await tc.downloadTool(url, undefined, auth);
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to download ${label} from ${url}: ${msg}. ` +
+            `Check that the gaffer-sh/gaffer release exists and the asset is present.`);
+    }
 }
 async function sha256(file) {
     return new Promise((resolve, reject) => {

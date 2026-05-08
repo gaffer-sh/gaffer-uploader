@@ -22,7 +22,7 @@ inputs:
       'gaffer_api_key is deprecated. Please use gaffer_upload_token instead.'
   report_path:
     description: 'Path to the relevant report file or directory to upload.'
-    required: false
+    required: true
   api_endpoint:
     description: 'Custom API endpoint URL (for preview/staging environments).'
     required: false
@@ -40,12 +40,17 @@ inputs:
       'Optional name of the test suite to associate with the test run report.'
     required: false
   upload_timeout:
-    description: 'Upload timeout in seconds. Defaults to 30.'
+    description:
+      'Per-request HTTP timeout in seconds (default: 30). With multipart uploads
+      each part PUT runs against this timeout, so bump it (e.g. to 300 or
+      higher) for multi-gigabyte uploads.'
     required: false
     default: '30'
   max_file_size_mb:
     description:
-      'Maximum size of any individual file to upload, in MB. Defaults to 100.'
+      'Per-file size limit in MB (default: 100, platform max: 5000). Files above
+      this are rejected up front. Multipart elevation above 90 MB is automatic;
+      no separate flag is needed.'
     required: false
     default: '100'
   debug:

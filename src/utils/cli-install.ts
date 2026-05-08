@@ -1,8 +1,8 @@
 /**
  * Installs the `gaffer` CLI binary released from gaffer-sh/gaffer.
  *
- * The CLI is fully open source. Source, release pipeline, and signed
- * checksums all live in the public repo:
+ * The CLI is fully open source. Source, release pipeline, and
+ * sha256 checksums all live in the public repo:
  *   https://github.com/gaffer-sh/gaffer
  *
  * Specifically, the upload code this Action ends up running is in:
@@ -12,9 +12,12 @@
  * Release artifacts (tarballs + checksums.txt) are produced by:
  *   .github/workflows/release-cli.yml
  *
- * The download flow below is intentionally narrow: pinned version tag,
- * sha256-verified tarball, no post-install hooks, GITHUB_TOKEN-authed
- * download to lift the anonymous rate limit.
+ * Trust boundary: the only thing this module guarantees is that the
+ * downloaded tarball's bytes match the sha256 line in the release's
+ * checksums.txt. Tarball and checksums.txt are both fetched from the same
+ * GitHub release asset URL — an attacker who tampers the release can swap
+ * both. Cosign / minisign signing is not yet wired up; revisit when we
+ * publish the public signing key.
  */
 import * as core from '@actions/core'
 import * as tc from '@actions/tool-cache'
@@ -26,12 +29,15 @@ import * as path from 'path'
 const CLI_REPO = 'gaffer-sh/gaffer'
 
 /**
- * Default CLI version installed when the action input `cli_version` is empty.
- * Bump alongside any v2.x.x release that depends on a newer CLI feature.
- * Pinning by default keeps the Action deterministic; users can opt into a
- * newer CLI without waiting for a v2.x.x release by setting `cli_version`.
+ * Default CLI version installed when `cli_version` input is empty.
+ * Last verified against `cli-v0.4.0` (TASK-49). Bump alongside any v2.x.x
+ * release that depends on a newer CLI feature; pinning by default keeps
+ * the Action deterministic.
  */
 const DEFAULT_CLI_VERSION = '0.4.0'
+
+/** Conservative semver subset, matches `1.2.3` and `1.2.3-alpha.1`. */
+const VERSION_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/
 
 export interface InstallResult {
   binaryPath: string
@@ -41,7 +47,7 @@ export interface InstallResult {
 export async function installCli(
   requestedVersion?: string
 ): Promise<InstallResult> {
-  const version = (requestedVersion ?? DEFAULT_CLI_VERSION).replace(/^v/, '')
+  const version = normalizeVersion(requestedVersion)
   const target = resolveTarget(os.platform(), os.arch())
   const binaryName = target.startsWith('windows-') ? 'gaffer.exe' : 'gaffer'
 
@@ -61,20 +67,31 @@ export async function installCli(
     : undefined
 
   core.info(`Downloading ${tarballUrl}`)
-  const tarballPath = await tc.downloadTool(tarballUrl, undefined, auth)
-  const checksumsPath = await tc.downloadTool(checksumsUrl, undefined, auth)
+  const tarballPath = await downloadWithContext(
+    tarballUrl,
+    `gaffer ${version} (${target}) tarball`,
+    auth
+  )
+  const checksumsPath = await downloadWithContext(
+    checksumsUrl,
+    `gaffer ${version} checksums.txt`,
+    auth
+  )
 
   const expectedSha = readExpectedSha256(checksumsPath, tarballName)
   const actualSha = await sha256(tarballPath)
   if (expectedSha !== actualSha) {
     throw new Error(
-      `SHA256 mismatch for ${tarballName}: expected ${expectedSha}, got ${actualSha}`
+      `SHA256 mismatch for ${tarballName}: expected ${expectedSha}, got ${actualSha}. ` +
+        `Refusing to install. Verify the release at https://github.com/${CLI_REPO}/releases/tag/${tag}.`
     )
   }
 
   const extracted = await tc.extractTar(tarballPath)
   const binaryDir = locateBinaryDir(extracted, binaryName)
-  fs.chmodSync(path.join(binaryDir, binaryName), 0o755)
+  if (os.platform() !== 'win32') {
+    fs.chmodSync(path.join(binaryDir, binaryName), 0o755)
+  }
 
   const cachedRoot = await tc.cacheDir(binaryDir, 'gaffer', version, target)
   core.addPath(cachedRoot)
@@ -82,7 +99,17 @@ export async function installCli(
   return { binaryPath: path.join(cachedRoot, binaryName), version }
 }
 
-function resolveTarget(platform: string, arch: string): string {
+export function normalizeVersion(requestedVersion?: string): string {
+  const raw = (requestedVersion ?? DEFAULT_CLI_VERSION).replace(/^v/, '').trim()
+  if (!VERSION_PATTERN.test(raw)) {
+    throw new Error(
+      `Invalid cli_version "${requestedVersion}". Expected semver like "0.4.0" or "0.4.0-rc.1".`
+    )
+  }
+  return raw
+}
+
+export function resolveTarget(platform: string, arch: string): string {
   const targets: Record<string, Record<string, string>> = {
     linux: { x64: 'linux-amd64', arm64: 'linux-arm64' },
     darwin: { x64: 'darwin-amd64', arm64: 'darwin-arm64' },
@@ -98,7 +125,10 @@ function resolveTarget(platform: string, arch: string): string {
   return target
 }
 
-function readExpectedSha256(checksumsPath: string, filename: string): string {
+export function readExpectedSha256(
+  checksumsPath: string,
+  filename: string
+): string {
   const content = fs.readFileSync(checksumsPath, 'utf-8')
   for (const raw of content.split('\n')) {
     const line = raw.trim()
@@ -109,7 +139,10 @@ function readExpectedSha256(checksumsPath: string, filename: string): string {
     // checksums.txt entries may use a leading "*" for binary mode (sha256sum -b)
     if (file === filename || file === `*${filename}`) return sum
   }
-  throw new Error(`No checksum entry for ${filename} in checksums.txt`)
+  throw new Error(
+    `No checksum entry for ${filename} in ${checksumsPath}. ` +
+      `The release may be missing this asset or checksums.txt is malformed.`
+  )
 }
 
 function locateBinaryDir(extractRoot: string, binaryName: string): string {
@@ -126,6 +159,22 @@ function locateBinaryDir(extractRoot: string, binaryName: string): string {
   throw new Error(
     `Extracted archive ${extractRoot} does not contain ${binaryName}`
   )
+}
+
+async function downloadWithContext(
+  url: string,
+  label: string,
+  auth?: string
+): Promise<string> {
+  try {
+    return await tc.downloadTool(url, undefined, auth)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(
+      `Failed to download ${label} from ${url}: ${msg}. ` +
+        `Check that the gaffer-sh/gaffer release exists and the asset is present.`
+    )
+  }
 }
 
 async function sha256(file: string): Promise<string> {

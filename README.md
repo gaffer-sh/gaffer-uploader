@@ -4,9 +4,9 @@ GitHub Action that uploads test reports to [Gaffer](https://gaffer.sh).
 
 `v2` is a thin wrapper around the `gaffer` CLI. The Action installs a prebuilt
 binary on the runner, then invokes `gaffer upload` with your inputs. The CLI is
-fully open source — source, release pipeline, and signed checksums all live at
-[`gaffer-sh/gaffer`](https://github.com/gaffer-sh/gaffer); the upload command
-itself is in
+fully open source — source, release pipeline, and a per-release sha256 checksums
+file all live at [`gaffer-sh/gaffer`](https://github.com/gaffer-sh/gaffer); the
+upload command itself is in
 [`packages/cli/src/commands/upload.rs`](https://github.com/gaffer-sh/gaffer/blob/main/packages/cli/src/commands/upload.rs).
 
 Files larger than 90 MB automatically route through Gaffer's R2 multipart upload
@@ -98,8 +98,9 @@ What changes operationally:
   with problem/cause/fix and the upload session ID + Cloudflare Ray ID.
   Workflows that grep for specific v1 strings will need updates.
 - **Supported runner targets** are `linux-amd64`, `linux-arm64`, `darwin-amd64`,
-  `darwin-arm64`, and `windows-amd64`. v1 ran anywhere `node24` ran; if you have
-  self-hosted runners on other architectures, see the escape hatch below.
+  `darwin-arm64`, and `windows-amd64`. v1 runs anywhere `node24` runs (it does
+  the upload in TypeScript, no native binary); if you have self-hosted runners
+  on other architectures, see the escape hatch below.
 
 If any of those are dealbreakers in your environment, **pin `@v1`** to stay on
 the proven TypeScript path. `gaffer-sh/gaffer-uploader@v1` is preserved
