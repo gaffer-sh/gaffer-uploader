@@ -1,7 +1,7 @@
 {
   "name": "gaffer-uploader",
   "description": "GitHub Action that installs the open-source gaffer CLI and uploads test reports to Gaffer (multipart up to 5 GB per file)",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": "Gaffer <support@gaffer.sh>",
   "private": true,
   "homepage": "https://github.com/gaffer-sh/gaffer-uploader",
