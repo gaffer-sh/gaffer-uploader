@@ -3,8 +3,13 @@
 GitHub Action that uploads test reports to [Gaffer](https://gaffer.sh).
 
 `v2` is a thin wrapper around the `gaffer` CLI. The Action installs a prebuilt
-binary on the runner, then invokes `gaffer upload` with your inputs. Files
-larger than 90 MB automatically route through Gaffer's R2 multipart upload
+binary on the runner, then invokes `gaffer upload` with your inputs. The CLI is
+fully open source — source, release pipeline, and signed checksums all live at
+[`gaffer-sh/gaffer`](https://github.com/gaffer-sh/gaffer); the upload command
+itself is in
+[`packages/cli/src/commands/upload.rs`](https://github.com/gaffer-sh/gaffer/blob/main/packages/cli/src/commands/upload.rs).
+
+Files larger than 90 MB automatically route through Gaffer's R2 multipart upload
 endpoints, so individual reports up to 5 GB upload end-to-end without any extra
 configuration. Plan storage caps are the only practical ceiling.
 
@@ -73,6 +78,14 @@ complete:
 The workflow YAML diff is one line: `@v0.5.1 → @v2`. All v1 inputs and outputs
 are preserved. The deprecated `gaffer_api_key` alias still works (with a
 warning).
+
+The new upload path runs through the `gaffer` CLI binary released from the
+public [`gaffer-sh/gaffer`](https://github.com/gaffer-sh/gaffer) repo. Audit the
+[release workflow](https://github.com/gaffer-sh/gaffer/blob/main/.github/workflows/release-cli.yml)
+or browse the upload implementation at
+[`packages/cli/src/commands/upload.rs`](https://github.com/gaffer-sh/gaffer/blob/main/packages/cli/src/commands/upload.rs)
+and
+[`packages/gaffer-core/src/upload.rs`](https://github.com/gaffer-sh/gaffer/blob/main/packages/gaffer-core/src/upload.rs).
 
 What changes operationally:
 

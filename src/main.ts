@@ -1,3 +1,12 @@
+/**
+ * Action entrypoint for gaffer-uploader v2.
+ *
+ * v2 is a thin wrapper. It reads the v1-compatible Action inputs, installs
+ * the `gaffer` CLI binary released from the public
+ * https://github.com/gaffer-sh/gaffer repo (see `cli-install.ts`), then
+ * invokes `gaffer upload` and surfaces the structured success/failure
+ * envelope back to GitHub Actions.
+ */
 import * as core from '@actions/core'
 import { spawnSync } from 'child_process'
 

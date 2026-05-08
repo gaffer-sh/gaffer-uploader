@@ -28266,6 +28266,15 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.run = run;
+/**
+ * Action entrypoint for gaffer-uploader v2.
+ *
+ * v2 is a thin wrapper. It reads the v1-compatible Action inputs, installs
+ * the `gaffer` CLI binary released from the public
+ * https://github.com/gaffer-sh/gaffer repo (see `cli-install.ts`), then
+ * invokes `gaffer upload` and surfaces the structured success/failure
+ * envelope back to GitHub Actions.
+ */
 const core = __importStar(__nccwpck_require__(6966));
 const child_process_1 = __nccwpck_require__(7698);
 const action_utils_1 = __nccwpck_require__(3320);
@@ -28517,6 +28526,24 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.installCli = installCli;
+/**
+ * Installs the `gaffer` CLI binary released from gaffer-sh/gaffer.
+ *
+ * The CLI is fully open source. Source, release pipeline, and signed
+ * checksums all live in the public repo:
+ *   https://github.com/gaffer-sh/gaffer
+ *
+ * Specifically, the upload code this Action ends up running is in:
+ *   - packages/cli/src/commands/upload.rs   (CLI surface + structured errors)
+ *   - packages/gaffer-core/src/upload.rs    (routing, MPU client, retries)
+ *
+ * Release artifacts (tarballs + checksums.txt) are produced by:
+ *   .github/workflows/release-cli.yml
+ *
+ * The download flow below is intentionally narrow: pinned version tag,
+ * sha256-verified tarball, no post-install hooks, GITHUB_TOKEN-authed
+ * download to lift the anonymous rate limit.
+ */
 const core = __importStar(__nccwpck_require__(6966));
 const tc = __importStar(__nccwpck_require__(5440));
 const crypto = __importStar(__nccwpck_require__(6982));

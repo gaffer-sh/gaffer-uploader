@@ -1,5 +1,8 @@
 name: 'gaffer-uploader'
-description: 'Upload test runs and reports to Gaffer'
+description:
+  'Upload test runs and reports to Gaffer. Wraps the open-source gaffer CLI
+  (https://github.com/gaffer-sh/gaffer); files >90 MB upload via R2 multipart
+  automatically.'
 author: 'gaffer.sh'
 
 branding:

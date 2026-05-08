@@ -1,3 +1,21 @@
+/**
+ * Installs the `gaffer` CLI binary released from gaffer-sh/gaffer.
+ *
+ * The CLI is fully open source. Source, release pipeline, and signed
+ * checksums all live in the public repo:
+ *   https://github.com/gaffer-sh/gaffer
+ *
+ * Specifically, the upload code this Action ends up running is in:
+ *   - packages/cli/src/commands/upload.rs   (CLI surface + structured errors)
+ *   - packages/gaffer-core/src/upload.rs    (routing, MPU client, retries)
+ *
+ * Release artifacts (tarballs + checksums.txt) are produced by:
+ *   .github/workflows/release-cli.yml
+ *
+ * The download flow below is intentionally narrow: pinned version tag,
+ * sha256-verified tarball, no post-install hooks, GITHUB_TOKEN-authed
+ * download to lift the anonymous rate limit.
+ */
 import * as core from '@actions/core'
 import * as tc from '@actions/tool-cache'
 import * as crypto from 'crypto'
