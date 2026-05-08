@@ -353,7 +353,7 @@ describe('parseEnvelope', () => {
     expect(parseEnvelope('hello\n{"foo":1}\n', '')).toBeNull()
   })
 
-  it('returns null on unparseable JSON', () => {
+  it('returns null on unparsable JSON', () => {
     expect(parseEnvelope('{not-json}\n', '')).toBeNull()
   })
 })
