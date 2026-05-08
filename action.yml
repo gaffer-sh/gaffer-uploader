@@ -49,6 +49,13 @@ inputs:
     description: 'Enable debug logging, including full API responses.'
     required: false
     default: 'false'
+  cli_version:
+    description:
+      'Pin the gaffer CLI version installed by this action (default: tracks the
+      version this action was released with). Override only if you need a newer
+      CLI feature without waiting for a new gaffer-uploader release.'
+    required: false
+    default: ''
 
 outputs:
   status:

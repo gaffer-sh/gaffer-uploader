@@ -1,217 +1,203 @@
 import * as core from '@actions/core'
+import * as childProcess from 'child_process'
 import { run } from '../../src/main'
 import * as actionUtils from '../../src/utils/action-utils'
-import * as formDataUtils from '../../src/utils/form-data-utils'
-import { TestRunTags } from '../../src/types'
-import FormData from 'form-data'
-import axios from 'axios'
+import * as cliInstall from '../../src/utils/cli-install'
 
-// Mock all dependencies
 jest.mock('@actions/core')
+jest.mock('child_process')
 jest.mock('../../src/utils/action-utils')
-jest.mock('../../src/utils/form-data-utils')
+jest.mock('../../src/utils/cli-install')
 
 const mockedCore = jest.mocked(core)
 const mockedActionUtils = jest.mocked(actionUtils)
-const mockedFormDataUtils = jest.mocked(formDataUtils)
+const mockedCliInstall = jest.mocked(cliInstall)
+const mockedSpawnSync = jest.mocked(childProcess.spawnSync)
+
+const baseInputs = {
+  apiKey: 'gfr_test',
+  reportPath: './reports/test.xml',
+  apiEndpoint: 'https://app.gaffer.sh/api/upload',
+  timeoutMs: 30000,
+  maxFileSizeBytes: 100 * 1024 * 1024,
+  debug: false
+}
+
+function mockSuccessfulCliRun(stdout: string): void {
+  mockedSpawnSync.mockReturnValue({
+    pid: 0,
+    output: [],
+    stdout,
+    stderr: '',
+    status: 0,
+    signal: null
+  } as ReturnType<typeof childProcess.spawnSync>)
+}
 
 describe('main', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockedCore.getInput.mockReturnValue('')
+    mockedCliInstall.installCli.mockResolvedValue({
+      binaryPath: '/runner/_tool/gaffer/0.4.0/linux-amd64/gaffer',
+      version: '0.4.0'
+    })
   })
 
-  it('should successfully upload report when all operations succeed', async () => {
-    // Mock return values
-    const mockTags: TestRunTags = { commitSha: 'abc123' }
-    const mockForm = new FormData()
-
-    mockedActionUtils.parseActionInputs.mockReturnValue({
-      apiKey: 'test-key',
-      reportPath: 'test-path',
-      apiEndpoint: 'https://app.gaffer.sh/api/upload',
-      timeoutMs: 30000,
-      maxFileSizeBytes: 104857600,
-      debug: false
+  it('passes parsed inputs through to the CLI and surfaces session IDs', async () => {
+    mockedActionUtils.parseActionInputs.mockReturnValue(baseInputs)
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({
+      commitSha: 'abc123',
+      branch: 'main',
+      framework: 'playwright',
+      testSuite: 'e2e'
     })
-    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue(mockTags)
-    mockedFormDataUtils.createUploadFormData.mockReturnValue(
-      mockForm as unknown as FormData
+    mockSuccessfulCliRun(
+      JSON.stringify({
+        status: 'success',
+        uploadSessionId: 'upl_abc',
+        projectId: 'prj_xyz',
+        filesUploaded: 3,
+        bytesUploaded: 1024,
+        elapsedMs: 850
+      })
     )
-    mockedFormDataUtils.uploadToGaffer.mockResolvedValue({
-      data: {
-        uploadSession: { id: 'upl_abc', projectId: 'prj_xyz' }
-      }
-    } as axios.AxiosResponse)
 
     await run()
 
-    // Verify all functions were called with correct parameters
-    expect(mockedActionUtils.parseActionInputs).toHaveBeenCalled()
-    expect(mockedActionUtils.parseTestRunTagsFromInputs).toHaveBeenCalled()
-    expect(mockedFormDataUtils.createUploadFormData).toHaveBeenCalledWith(
-      'test-path',
-      mockTags,
-      104857600
-    )
-    expect(mockedFormDataUtils.uploadToGaffer).toHaveBeenCalledWith(
-      mockForm,
-      'test-key',
-      'https://app.gaffer.sh/api/upload',
-      30000
+    expect(mockedCliInstall.installCli).toHaveBeenCalled()
+    expect(mockedSpawnSync).toHaveBeenCalledWith(
+      '/runner/_tool/gaffer/0.4.0/linux-amd64/gaffer',
+      [
+        'upload',
+        './reports/test.xml',
+        '--token',
+        'gfr_test',
+        '--api-url',
+        'https://app.gaffer.sh',
+        '--commit-sha',
+        'abc123',
+        '--branch',
+        'main',
+        '--test-framework',
+        'playwright',
+        '--test-suite',
+        'e2e',
+        '--timeout',
+        '30',
+        '--max-file-size-mb',
+        '100'
+      ],
+      expect.objectContaining({ encoding: 'utf-8' })
     )
     expect(mockedCore.setOutput).toHaveBeenCalledWith('test_run_id', 'upl_abc')
     expect(mockedCore.setOutput).toHaveBeenCalledWith('project_id', 'prj_xyz')
     expect(mockedCore.setOutput).toHaveBeenCalledWith('status', 'success')
     expect(mockedCore.setFailed).not.toHaveBeenCalled()
-    expect(mockedCore.info).not.toHaveBeenCalled()
   })
 
-  it('should fall back to testRun field when uploadSession is absent', async () => {
-    const mockForm = new FormData()
-
+  it('honors a custom api_endpoint without a /api/upload suffix', async () => {
     mockedActionUtils.parseActionInputs.mockReturnValue({
-      apiKey: 'test-key',
-      reportPath: 'test-path',
-      apiEndpoint: 'https://app.gaffer.sh/api/upload',
-      timeoutMs: 30000,
-      maxFileSizeBytes: 104857600,
-      debug: false
+      ...baseInputs,
+      apiEndpoint: 'https://preview.gaffer.sh'
     })
     mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
-    mockedFormDataUtils.createUploadFormData.mockReturnValue(
-      mockForm as unknown as FormData
-    )
-    mockedFormDataUtils.uploadToGaffer.mockResolvedValue({
-      data: {
-        testRun: { id: 'upl_legacy', projectId: 'prj_legacy' }
-      }
-    } as axios.AxiosResponse)
+    mockSuccessfulCliRun(JSON.stringify({ status: 'success' }))
 
     await run()
 
-    expect(mockedCore.setOutput).toHaveBeenCalledWith(
-      'test_run_id',
-      'upl_legacy'
-    )
-    expect(mockedCore.setOutput).toHaveBeenCalledWith(
-      'project_id',
-      'prj_legacy'
-    )
+    const callArgs = mockedSpawnSync.mock.calls[0][1] as string[]
+    const apiUrlIdx = callArgs.indexOf('--api-url')
+    expect(callArgs[apiUrlIdx + 1]).toBe('https://preview.gaffer.sh')
+  })
+
+  it('forwards --debug when debug input is true', async () => {
+    mockedActionUtils.parseActionInputs.mockReturnValue({
+      ...baseInputs,
+      debug: true
+    })
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
+    mockSuccessfulCliRun(JSON.stringify({ status: 'success' }))
+
+    await run()
+
+    const callArgs = mockedSpawnSync.mock.calls[0][1] as string[]
+    expect(callArgs).toContain('--debug')
+  })
+
+  it('still sets status when the CLI emits no JSON line', async () => {
+    mockedActionUtils.parseActionInputs.mockReturnValue(baseInputs)
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
+    mockSuccessfulCliRun('uploaded\n')
+
+    await run()
+
     expect(mockedCore.setOutput).toHaveBeenCalledWith('status', 'success')
-  })
-
-  it('should still set status when response has no session fields', async () => {
-    const mockForm = new FormData()
-
-    mockedActionUtils.parseActionInputs.mockReturnValue({
-      apiKey: 'test-key',
-      reportPath: 'test-path',
-      apiEndpoint: 'https://app.gaffer.sh/api/upload',
-      timeoutMs: 30000,
-      maxFileSizeBytes: 104857600,
-      debug: false
-    })
-    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
-    mockedFormDataUtils.createUploadFormData.mockReturnValue(
-      mockForm as unknown as FormData
-    )
-    mockedFormDataUtils.uploadToGaffer.mockResolvedValue({
-      data: {}
-    } as axios.AxiosResponse)
-
-    await run()
-
     expect(mockedCore.setOutput).not.toHaveBeenCalledWith(
       'test_run_id',
       expect.anything()
     )
-    expect(mockedCore.setOutput).not.toHaveBeenCalledWith(
-      'project_id',
-      expect.anything()
-    )
-    expect(mockedCore.setOutput).toHaveBeenCalledWith('status', 'success')
     expect(mockedCore.setFailed).not.toHaveBeenCalled()
   })
 
-  it('should log API response when debug is enabled', async () => {
-    const mockTags: TestRunTags = { commitSha: 'abc123' }
-    const mockForm = new FormData()
-
-    mockedActionUtils.parseActionInputs.mockReturnValue({
-      apiKey: 'test-key',
-      reportPath: 'test-path',
-      apiEndpoint: 'https://app.gaffer.sh/api/upload',
-      timeoutMs: 30000,
-      maxFileSizeBytes: 104857600,
-      debug: true
-    })
-    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue(mockTags)
-    mockedFormDataUtils.createUploadFormData.mockReturnValue(
-      mockForm as unknown as FormData
-    )
-    mockedFormDataUtils.uploadToGaffer.mockResolvedValue({
-      data: { success: true }
-    } as axios.AxiosResponse)
+  it('fails when the CLI exits non-zero', async () => {
+    mockedActionUtils.parseActionInputs.mockReturnValue(baseInputs)
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
+    mockedSpawnSync.mockReturnValue({
+      pid: 0,
+      output: [],
+      stdout: '',
+      stderr: '',
+      status: 2,
+      signal: null
+    } as ReturnType<typeof childProcess.spawnSync>)
 
     await run()
 
-    expect(mockedCore.info).toHaveBeenCalledWith(
-      `[debug] API response: ${JSON.stringify({ success: true })}`
+    expect(mockedCore.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('exit')
     )
+    expect(mockedCore.setOutput).not.toHaveBeenCalledWith('status', 'success')
   })
 
-  it('should handle errors from parseActionInputs', async () => {
-    const error = new Error('API key missing')
+  it('fails cleanly when parseActionInputs throws', async () => {
     mockedActionUtils.parseActionInputs.mockImplementation(() => {
-      throw error
+      throw new Error('Upload token not provided.')
     })
 
     await run()
 
-    expect(mockedCore.setFailed).toHaveBeenCalledWith(error.message)
-    expect(mockedCore.setOutput).not.toHaveBeenCalled()
-    expect(mockedFormDataUtils.uploadToGaffer).not.toHaveBeenCalled()
+    expect(mockedCore.setFailed).toHaveBeenCalledWith(
+      'Upload token not provided.'
+    )
+    expect(mockedSpawnSync).not.toHaveBeenCalled()
   })
 
-  it('should handle errors from createUploadFormData', async () => {
-    const error = new Error('Failed to create form data')
-    mockedActionUtils.parseActionInputs.mockReturnValue({
-      apiKey: 'test-key',
-      reportPath: 'test-path',
-      apiEndpoint: 'https://app.gaffer.sh/api/upload',
-      timeoutMs: 30000,
-      maxFileSizeBytes: 104857600,
-      debug: false
-    })
+  it('fails cleanly when installCli rejects', async () => {
+    mockedActionUtils.parseActionInputs.mockReturnValue(baseInputs)
     mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
-    mockedFormDataUtils.createUploadFormData.mockImplementation(() => {
-      throw error
-    })
+    mockedCliInstall.installCli.mockRejectedValue(
+      new Error('Unsupported runner: linux/arm32')
+    )
 
     await run()
 
-    expect(mockedCore.setFailed).toHaveBeenCalledWith(error.message)
-    expect(mockedCore.setOutput).not.toHaveBeenCalled()
-    expect(mockedFormDataUtils.uploadToGaffer).not.toHaveBeenCalled()
+    expect(mockedCore.setFailed).toHaveBeenCalledWith(
+      'Unsupported runner: linux/arm32'
+    )
+    expect(mockedSpawnSync).not.toHaveBeenCalled()
   })
 
-  it('should handle errors from uploadToGaffer', async () => {
-    const error = new Error('Upload failed')
-    mockedActionUtils.parseActionInputs.mockReturnValue({
-      apiKey: 'test-key',
-      reportPath: 'test-path',
-      apiEndpoint: 'https://app.gaffer.sh/api/upload',
-      timeoutMs: 30000,
-      maxFileSizeBytes: 104857600,
-      debug: false
-    })
+  it('reads cli_version input and passes it to installCli', async () => {
+    mockedCore.getInput.mockImplementation((name: string) =>
+      name === 'cli_version' ? '0.5.0' : ''
+    )
+    mockedActionUtils.parseActionInputs.mockReturnValue(baseInputs)
     mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
-    mockedFormDataUtils.createUploadFormData.mockReturnValue(new FormData())
-    mockedFormDataUtils.uploadToGaffer.mockRejectedValue(error)
+    mockSuccessfulCliRun(JSON.stringify({ status: 'success' }))
 
     await run()
 
-    expect(mockedCore.setFailed).toHaveBeenCalledWith(error.message)
-    expect(mockedCore.setOutput).not.toHaveBeenCalled()
+    expect(mockedCliInstall.installCli).toHaveBeenCalledWith('0.5.0')
   })
 })
