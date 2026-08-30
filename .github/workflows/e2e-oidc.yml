@@ -1,12 +1,12 @@
-# Exercises the OIDC-without-a-token path (GAF-241) against a live preview
-# server, using this repo's own `./` action (dist/index.js as it exists on
-# the branch, not a released tag).
+# Exercises the OIDC-without-a-token path against a live preview server,
+# using this repo's own `./` action (dist/index.js as it exists on the
+# branch, not a released tag).
 #
 # `workflow_dispatch` only, not `pull_request` or `push`: this cannot pass
 # yet. It needs two things that ship independently of this repo:
-#   1. app.gaffer.sh's `/oauth/token` OIDC token-exchange grant (GAF-247).
+#   1. app.gaffer.sh's `/oauth/token` OIDC token-exchange grant.
 #   2. A public `gaffer` CLI release containing the OIDC exchange
-#      (packages/cli/src/oidc.rs in gaffer-sh/gaffer, tracked by GAF-251)
+#      (packages/cli/src/oidc.rs in gaffer-sh/gaffer)
 #      newer than `DEFAULT_CLI_VERSION` in src/utils/cli-install.ts, which
 #      still pins 0.4.0 (predates OIDC support) as of this workflow's
 #      authoring.

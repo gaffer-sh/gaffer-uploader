@@ -1,12 +1,32 @@
+import * as core from '@actions/core'
+import * as tc from '@actions/tool-cache'
+import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 
 import {
+  installCli,
   normalizeVersion,
   readExpectedSha256,
   resolveTarget
 } from '../../../src/utils/cli-install'
+
+jest.mock('@actions/core')
+jest.mock('@actions/tool-cache')
+// Only platform()/arch() are faked (installCli's target-resolution inputs);
+// everything else — including tmpdir(), used by this file's own fixtures —
+// stays real. Node's built-in module exports aren't configurable, so
+// jest.spyOn(os, 'platform') fails; mocking the module is the only way in.
+jest.mock('os', () => ({
+  ...jest.requireActual('os'),
+  platform: jest.fn(),
+  arch: jest.fn()
+}))
+
+const mockedCore = jest.mocked(core)
+const mockedTc = jest.mocked(tc)
+const mockedOs = jest.mocked(os)
 
 describe('resolveTarget', () => {
   // Must match the asset names published by gaffer-sh/gaffer's release-cli.yml.
@@ -132,5 +152,186 @@ describe('readExpectedSha256', () => {
     expect(
       readExpectedSha256(filePath, 'gaffer-x86_64-unknown-linux-gnu.tar.gz')
     ).toBe('abcd')
+  })
+})
+
+describe('installCli', () => {
+  // Only @actions/tool-cache and @actions/core are mocked — the download,
+  // checksum, and extraction steps run against real temp-dir fixtures so the
+  // test exercises the actual sha256/fs logic, not a mock of it.
+  let tmpDir: string
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-install-installCli-'))
+    mockedOs.platform.mockReturnValue('linux')
+    mockedOs.arch.mockReturnValue('x64')
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  function sha256Of(filePath: string): string {
+    return crypto
+      .createHash('sha256')
+      .update(fs.readFileSync(filePath))
+      .digest('hex')
+  }
+
+  function mockDownloads(tarballPath: string, checksumsPath: string): void {
+    mockedTc.downloadTool.mockImplementation(async (url: unknown) =>
+      String(url).endsWith('checksums.txt') ? checksumsPath : tarballPath
+    )
+  }
+
+  it('uses a cached install and skips downloading entirely', async () => {
+    mockedTc.find.mockReturnValue(tmpDir)
+
+    const result = await installCli('1.2.3')
+
+    expect(result).toEqual({
+      binaryPath: path.join(tmpDir, 'gaffer'),
+      version: '1.2.3'
+    })
+    expect(mockedCore.addPath).toHaveBeenCalledWith(tmpDir)
+    expect(mockedTc.downloadTool).not.toHaveBeenCalled()
+  })
+
+  it('uses the .exe binary name and skips chmod on Windows', async () => {
+    mockedOs.platform.mockReturnValue('win32')
+    mockedTc.find.mockReturnValue('')
+
+    const tarballPath = path.join(tmpDir, 'tarball')
+    fs.writeFileSync(tarballPath, 'fake windows tarball bytes')
+    const checksumsPath = path.join(tmpDir, 'checksums.txt')
+    fs.writeFileSync(
+      checksumsPath,
+      `${sha256Of(tarballPath)}  gaffer-x86_64-pc-windows-gnu.tar.gz\n`
+    )
+    mockDownloads(tarballPath, checksumsPath)
+
+    const extractDir = path.join(tmpDir, 'extracted-win')
+    fs.mkdirSync(extractDir)
+    const binaryPath = path.join(extractDir, 'gaffer.exe')
+    fs.writeFileSync(binaryPath, 'MZ...', { mode: 0o644 })
+    mockedTc.extractTar.mockResolvedValue(extractDir)
+    mockedTc.cacheDir.mockImplementation(async sourceDir => sourceDir)
+
+    const result = await installCli('1.2.3')
+
+    expect(result.binaryPath).toBe(binaryPath)
+    // chmod is POSIX-only; on win32 the mode must be left untouched.
+    expect(fs.statSync(binaryPath).mode & 0o777).toBe(0o644)
+  })
+
+  it('downloads, verifies checksum, extracts, chmods, and caches on a cold install', async () => {
+    mockedTc.find.mockReturnValue('')
+
+    const tarballPath = path.join(tmpDir, 'tarball')
+    fs.writeFileSync(tarballPath, 'fake tarball bytes')
+    const checksumsPath = path.join(tmpDir, 'checksums.txt')
+    fs.writeFileSync(
+      checksumsPath,
+      `${sha256Of(tarballPath)}  gaffer-x86_64-unknown-linux-gnu.tar.gz\n`
+    )
+    mockDownloads(tarballPath, checksumsPath)
+
+    const extractDir = path.join(tmpDir, 'extracted')
+    fs.mkdirSync(extractDir)
+    fs.writeFileSync(path.join(extractDir, 'gaffer'), '#!/bin/sh\n', {
+      mode: 0o644
+    })
+    mockedTc.extractTar.mockResolvedValue(extractDir)
+
+    const cacheDir = path.join(tmpDir, 'cached')
+    fs.mkdirSync(cacheDir)
+    fs.writeFileSync(path.join(cacheDir, 'gaffer'), '#!/bin/sh\n')
+    mockedTc.cacheDir.mockResolvedValue(cacheDir)
+
+    const result = await installCli('1.2.3')
+
+    expect(result).toEqual({
+      binaryPath: path.join(cacheDir, 'gaffer'),
+      version: '1.2.3'
+    })
+    expect(mockedTc.downloadTool).toHaveBeenCalledTimes(2)
+    expect(mockedTc.cacheDir).toHaveBeenCalledWith(
+      extractDir,
+      'gaffer',
+      '1.2.3',
+      'x86_64-unknown-linux-gnu'
+    )
+    expect(mockedCore.addPath).toHaveBeenCalledWith(cacheDir)
+    const mode = fs.statSync(path.join(extractDir, 'gaffer')).mode & 0o777
+    expect(mode).toBe(0o755)
+  })
+
+  it('locates the binary inside an extracted subdirectory', async () => {
+    mockedTc.find.mockReturnValue('')
+
+    const tarballPath = path.join(tmpDir, 'tarball')
+    fs.writeFileSync(tarballPath, 'fake tarball bytes, nested layout')
+    const checksumsPath = path.join(tmpDir, 'checksums.txt')
+    fs.writeFileSync(
+      checksumsPath,
+      `${sha256Of(tarballPath)}  gaffer-x86_64-unknown-linux-gnu.tar.gz\n`
+    )
+    mockDownloads(tarballPath, checksumsPath)
+
+    const extractDir = path.join(tmpDir, 'extracted-nested')
+    const subDir = path.join(extractDir, 'gaffer-x86_64-unknown-linux-gnu')
+    fs.mkdirSync(subDir, { recursive: true })
+    fs.writeFileSync(path.join(subDir, 'gaffer'), '#!/bin/sh\n')
+    mockedTc.extractTar.mockResolvedValue(extractDir)
+    mockedTc.cacheDir.mockImplementation(async sourceDir => sourceDir)
+
+    const result = await installCli('1.2.3')
+
+    expect(result.binaryPath).toBe(path.join(subDir, 'gaffer'))
+  })
+
+  it('throws when the extracted archive does not contain the binary', async () => {
+    mockedTc.find.mockReturnValue('')
+
+    const tarballPath = path.join(tmpDir, 'tarball')
+    fs.writeFileSync(tarballPath, 'fake tarball bytes, empty layout')
+    const checksumsPath = path.join(tmpDir, 'checksums.txt')
+    fs.writeFileSync(
+      checksumsPath,
+      `${sha256Of(tarballPath)}  gaffer-x86_64-unknown-linux-gnu.tar.gz\n`
+    )
+    mockDownloads(tarballPath, checksumsPath)
+
+    const emptyExtractDir = path.join(tmpDir, 'empty-extract')
+    fs.mkdirSync(emptyExtractDir)
+    mockedTc.extractTar.mockResolvedValue(emptyExtractDir)
+
+    await expect(installCli('1.2.3')).rejects.toThrow(/does not contain gaffer/)
+  })
+
+  it('refuses to install a tarball that fails checksum verification', async () => {
+    mockedTc.find.mockReturnValue('')
+
+    const tarballPath = path.join(tmpDir, 'tarball')
+    fs.writeFileSync(tarballPath, 'tampered bytes')
+    const checksumsPath = path.join(tmpDir, 'checksums.txt')
+    fs.writeFileSync(
+      checksumsPath,
+      `${'0'.repeat(64)}  gaffer-x86_64-unknown-linux-gnu.tar.gz\n`
+    )
+    mockDownloads(tarballPath, checksumsPath)
+
+    await expect(installCli('1.2.3')).rejects.toThrow(/SHA256 mismatch/)
+    expect(mockedTc.extractTar).not.toHaveBeenCalled()
+  })
+
+  it('wraps a failed download with the asset label and repo for troubleshooting', async () => {
+    mockedTc.find.mockReturnValue('')
+    mockedTc.downloadTool.mockRejectedValue(new Error('ETIMEDOUT'))
+
+    await expect(installCli('1.2.3')).rejects.toThrow(
+      /Failed to download gaffer 1\.2\.3 \(x86_64-unknown-linux-gnu\) tarball.*ETIMEDOUT.*gaffer-sh\/gaffer/s
+    )
   })
 })

@@ -28677,7 +28677,7 @@ const CLI_REPO = 'gaffer-sh/gaffer';
  * release that depends on a newer CLI feature; pinning by default keeps
  * the Action deterministic.
  */
-// TODO(GAF-241): bump to the first CLI release containing the OIDC exchange before merging.
+// TODO: bump to the first CLI release containing the OIDC exchange before merging (tracked internally as GAF-241).
 const DEFAULT_CLI_VERSION = '0.4.0';
 /** Conservative semver subset, matches `1.2.3` and `1.2.3-alpha.1`. */
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;

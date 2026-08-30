@@ -279,7 +279,7 @@ describe('action-utils', () => {
       expect(() => parseActionInputs()).toThrow('Report path not provided.')
     })
 
-    describe('OIDC fallback (GAF-241)', () => {
+    describe('OIDC fallback', () => {
       it('returns apiKey: undefined when no token is set but OIDC env vars are present', () => {
         setOidcEnv()
         mockedCore.getInput.mockImplementation((name: string) => {
