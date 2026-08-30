@@ -51,8 +51,8 @@ describe('action-utils', () => {
     clearOidcEnv()
   })
 
-  afterAll(() => {
-    // codespell:ignore afterall
+  // prettier-ignore
+  afterAll(() => { // codespell:ignore afterall
     if (originalOidcEnv.url === undefined) {
       delete process.env[ACTIONS_ID_TOKEN_REQUEST_URL_VAR]
     } else {
