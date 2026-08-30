@@ -2,20 +2,14 @@
 # using this repo's own `./` action (dist/index.js as it exists on the
 # branch, not a released tag).
 #
-# `workflow_dispatch` only, not `pull_request` or `push`: this cannot pass
-# yet. It needs two things that ship independently of this repo:
-#   1. app.gaffer.sh's `/oauth/token` OIDC token-exchange grant.
-#   2. A public `gaffer` CLI release containing the OIDC exchange
-#      (packages/cli/src/oidc.rs in gaffer-sh/gaffer)
-#      newer than `DEFAULT_CLI_VERSION` in src/utils/cli-install.ts, which
-#      still pins 0.4.0 (predates OIDC support) as of this workflow's
-#      authoring.
-# Once both exist and DEFAULT_CLI_VERSION is bumped past them, wire this up
-# to `pull_request` (or fold it into e2e.yml) so it runs on every PR.
-name: E2E - OIDC upload (manual)
+# Runs on every pull request since v2.1.0: the server's `/oauth/token`
+# token-exchange grant is live and `DEFAULT_CLI_VERSION` pins a CLI release
+# (0.7.0+) that performs the OIDC exchange itself.
+name: E2E - OIDC upload
 
 on:
   workflow_dispatch:
+  pull_request:
 
 permissions:
   contents: read
