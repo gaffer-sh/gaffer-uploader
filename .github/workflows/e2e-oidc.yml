@@ -1,0 +1,58 @@
+# Exercises the OIDC-without-a-token path (GAF-241) against a live preview
+# server, using this repo's own `./` action (dist/index.js as it exists on
+# the branch, not a released tag).
+#
+# `workflow_dispatch` only, not `pull_request` or `push`: this cannot pass
+# yet. It needs two things that ship independently of this repo:
+#   1. app.gaffer.sh's `/oauth/token` OIDC token-exchange grant (GAF-247).
+#   2. A public `gaffer` CLI release containing the OIDC exchange
+#      (packages/cli/src/oidc.rs in gaffer-sh/gaffer, tracked by GAF-251)
+#      newer than `DEFAULT_CLI_VERSION` in src/utils/cli-install.ts, which
+#      still pins 0.4.0 (predates OIDC support) as of this workflow's
+#      authoring.
+# Once both exist and DEFAULT_CLI_VERSION is bumped past them, wire this up
+# to `pull_request` (or fold it into e2e.yml) so it runs on every PR.
+name: E2E - OIDC upload (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  oidc-upload:
+    name: Upload via OIDC, no stored token
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # required: lets gaffer request a runner identity token
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Generate a tiny JUnit report
+        run: |
+          mkdir -p test-results
+          cat > test-results/junit.xml <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuites>
+            <testsuite name="e2e-oidc" tests="1" failures="0" errors="0">
+              <testcase classname="e2e-oidc" name="placeholder" time="0"/>
+            </testsuite>
+          </testsuites>
+          EOF
+
+      - name: Upload to Gaffer via OIDC (no gaffer_upload_token)
+        uses: ./
+        with:
+          report_path: ./test-results/junit.xml
+          api_endpoint: https://preview.gaffer.sh
+          commit_sha: ${{ github.sha }}
+          branch: ${{ github.ref_name }}
+          test_framework: junit
+          test_suite: e2e-oidc
+          debug: 'true'

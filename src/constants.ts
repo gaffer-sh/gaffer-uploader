@@ -10,6 +10,16 @@ export const UPLOAD_TIMEOUT_VAR = 'upload_timeout'
 export const MAX_FILE_SIZE_VAR = 'max_file_size_mb'
 export const DEBUG_VAR = 'debug'
 
+// GitHub Actions injects both of these into the job environment only when
+// the workflow grants `permissions: id-token: write`. Their presence is
+// what lets the `gaffer` CLI exchange the runner's OIDC identity for a
+// project token on its own — see packages/cli/src/oidc.rs in
+// gaffer-sh/gaffer. Not Action inputs, so these are env var names, not
+// `core.getInput()` keys.
+export const ACTIONS_ID_TOKEN_REQUEST_URL_VAR = 'ACTIONS_ID_TOKEN_REQUEST_URL'
+export const ACTIONS_ID_TOKEN_REQUEST_TOKEN_VAR =
+  'ACTIONS_ID_TOKEN_REQUEST_TOKEN'
+
 // Defaults
 export const DEFAULT_TIMEOUT_SECONDS = 30
 export const DEFAULT_MAX_FILE_SIZE_MB = 100

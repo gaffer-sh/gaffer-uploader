@@ -28202,7 +28202,7 @@ module.exports = {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.TEST_SUITE_VAR = exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.DEFAULT_MAX_FILE_SIZE_MB = exports.DEFAULT_TIMEOUT_SECONDS = exports.DEBUG_VAR = exports.MAX_FILE_SIZE_VAR = exports.UPLOAD_TIMEOUT_VAR = exports.API_ENDPOINT_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_TOKEN_VAR = exports.MAX_UPLOAD_RETRIES = exports.AXIOS_TIMEOUT_MS = exports.GAFFER_UPLOAD_BASE_URL = void 0;
+exports.TEST_SUITE_VAR = exports.TEST_FRAMEWORK_VAR = exports.BRANCH_VAR = exports.COMMIT_SHA_VAR = exports.DEFAULT_MAX_FILE_SIZE_MB = exports.DEFAULT_TIMEOUT_SECONDS = exports.ACTIONS_ID_TOKEN_REQUEST_TOKEN_VAR = exports.ACTIONS_ID_TOKEN_REQUEST_URL_VAR = exports.DEBUG_VAR = exports.MAX_FILE_SIZE_VAR = exports.UPLOAD_TIMEOUT_VAR = exports.API_ENDPOINT_VAR = exports.REPORT_PATH_VAR = exports.GAFFER_API_KEY_VAR = exports.GAFFER_UPLOAD_TOKEN_VAR = exports.MAX_UPLOAD_RETRIES = exports.AXIOS_TIMEOUT_MS = exports.GAFFER_UPLOAD_BASE_URL = void 0;
 // Gaffer Constants
 exports.GAFFER_UPLOAD_BASE_URL = 'https://app.gaffer.sh/api/upload';
 exports.AXIOS_TIMEOUT_MS = 30000;
@@ -28214,6 +28214,14 @@ exports.API_ENDPOINT_VAR = 'api_endpoint';
 exports.UPLOAD_TIMEOUT_VAR = 'upload_timeout';
 exports.MAX_FILE_SIZE_VAR = 'max_file_size_mb';
 exports.DEBUG_VAR = 'debug';
+// GitHub Actions injects both of these into the job environment only when
+// the workflow grants `permissions: id-token: write`. Their presence is
+// what lets the `gaffer` CLI exchange the runner's OIDC identity for a
+// project token on its own — see packages/cli/src/oidc.rs in
+// gaffer-sh/gaffer. Not Action inputs, so these are env var names, not
+// `core.getInput()` keys.
+exports.ACTIONS_ID_TOKEN_REQUEST_URL_VAR = 'ACTIONS_ID_TOKEN_REQUEST_URL';
+exports.ACTIONS_ID_TOKEN_REQUEST_TOKEN_VAR = 'ACTIONS_ID_TOKEN_REQUEST_TOKEN';
 // Defaults
 exports.DEFAULT_TIMEOUT_SECONDS = 30;
 exports.DEFAULT_MAX_FILE_SIZE_MB = 100;
@@ -28355,13 +28363,14 @@ function buildCliArgs(inputs, tags) {
     // suffix so v1 → v2 migration works without users editing their workflow.
     const apiUrl = inputs.apiEndpoint.replace(/\/api\/upload\/?$/, '') ||
         'https://app.gaffer.sh';
-    const args = [
-        inputs.reportPath,
-        '--token',
-        inputs.apiKey,
-        '--api-url',
-        apiUrl
-    ];
+    const args = [inputs.reportPath, '--api-url', apiUrl];
+    // No token means the caller is relying on GitHub Actions OIDC (see
+    // hasGitHubActionsOidc() in action-utils.ts). Omit --token entirely
+    // rather than passing an empty string — the CLI does its own OIDC
+    // exchange only when no token is given at all.
+    if (inputs.apiKey) {
+        args.push('--token', inputs.apiKey);
+    }
     if (tags.commitSha)
         args.push('--commit-sha', tags.commitSha);
     if (tags.branch)
@@ -28417,6 +28426,11 @@ function lastLines(text, count) {
 }
 async function runCli(binary, args) {
     return new Promise(resolve => {
+        // No `env` option here means Node inherits the full parent process
+        // environment, including ACTIONS_ID_TOKEN_REQUEST_URL /
+        // ACTIONS_ID_TOKEN_REQUEST_TOKEN when the job has id-token: write. That
+        // is required for the CLI's own OIDC exchange when we omit --token
+        // above — do not add an `env` override that would filter these out.
         const child = (0, child_process_1.spawn)(binary, ['upload', ...args], {
             stdio: ['ignore', 'pipe', 'pipe']
         });
@@ -28493,10 +28507,24 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.hasGitHubActionsOidc = hasGitHubActionsOidc;
 exports.parseTestRunTagsFromInputs = parseTestRunTagsFromInputs;
 exports.parseActionInputs = parseActionInputs;
 const core = __importStar(__nccwpck_require__(6966));
 const constants_1 = __nccwpck_require__(5851);
+/**
+ * True when this job has `permissions: id-token: write` — GitHub Actions
+ * only populates both of these env vars in that case. When true and no
+ * token input was given, `parseActionInputs` returns `apiKey: undefined`
+ * instead of throwing, so `buildCliArgs` (main.ts) omits `--token` and the
+ * `gaffer` CLI exchanges the runner's own OIDC identity for a project token
+ * (see packages/cli/src/oidc.rs in gaffer-sh/gaffer). Not an Action input,
+ * so this reads env vars directly rather than `core.getInput()`.
+ */
+function hasGitHubActionsOidc() {
+    return Boolean(process.env[constants_1.ACTIONS_ID_TOKEN_REQUEST_URL_VAR] &&
+        process.env[constants_1.ACTIONS_ID_TOKEN_REQUEST_TOKEN_VAR]);
+}
 /**
  * Parses test run tags from GitHub Actions inputs.
  *
@@ -28533,7 +28561,12 @@ function parseActionInputs() {
     const timeoutSeconds = parseInt(core.getInput(constants_1.UPLOAD_TIMEOUT_VAR), 10) || constants_1.DEFAULT_TIMEOUT_SECONDS;
     const maxFileSizeMb = parseInt(core.getInput(constants_1.MAX_FILE_SIZE_VAR), 10) || constants_1.DEFAULT_MAX_FILE_SIZE_MB;
     const debug = core.getInput(constants_1.DEBUG_VAR) === 'true';
-    // Support both gaffer_upload_token (preferred) and gaffer_api_key (deprecated)
+    // Support both gaffer_upload_token (preferred) and gaffer_api_key
+    // (deprecated). Neither is required: with no token input, a job that
+    // grants `permissions: id-token: write` can still authenticate, because
+    // the CLI itself exchanges the runner's OIDC identity (see
+    // hasGitHubActionsOidc above). A stored token still takes precedence when
+    // both are available.
     let apiKey;
     if (uploadToken) {
         apiKey = uploadToken;
@@ -28542,8 +28575,14 @@ function parseActionInputs() {
         core.warning('gaffer_api_key is deprecated. Please use gaffer_upload_token instead.');
         apiKey = legacyApiKey;
     }
+    else if (hasGitHubActionsOidc()) {
+        apiKey = undefined;
+    }
     else {
-        throw new Error('Upload token not provided. Set the gaffer_upload_token input.');
+        throw new Error('Upload token not provided. Set the gaffer_upload_token input ' +
+            '(e.g. a GAFFER_UPLOAD_TOKEN repository secret), or grant this job ' +
+            '`permissions: id-token: write` so the gaffer CLI can authenticate ' +
+            'via GitHub Actions OIDC instead.');
     }
     if (!reportPath) {
         throw new Error('Report path not provided.');
@@ -28638,6 +28677,7 @@ const CLI_REPO = 'gaffer-sh/gaffer';
  * release that depends on a newer CLI feature; pinning by default keeps
  * the Action deterministic.
  */
+// TODO(GAF-241): bump to the first CLI release containing the OIDC exchange before merging.
 const DEFAULT_CLI_VERSION = '0.4.0';
 /** Conservative semver subset, matches `1.2.3` and `1.2.3-alpha.1`. */
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;

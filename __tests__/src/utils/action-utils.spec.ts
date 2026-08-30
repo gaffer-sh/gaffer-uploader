@@ -1,9 +1,12 @@
 import * as core from '@actions/core'
 import {
+  hasGitHubActionsOidc,
   parseTestRunTagsFromInputs,
   parseActionInputs
 } from '../../../src/utils/action-utils'
 import {
+  ACTIONS_ID_TOKEN_REQUEST_TOKEN_VAR,
+  ACTIONS_ID_TOKEN_REQUEST_URL_VAR,
   API_ENDPOINT_VAR,
   BRANCH_VAR,
   COMMIT_SHA_VAR,
@@ -22,10 +25,43 @@ import {
 jest.mock('@actions/core')
 const mockedCore = jest.mocked(core)
 
+/** Snapshot/restore so OIDC env state never leaks between tests or files. */
+const originalOidcEnv = {
+  url: process.env[ACTIONS_ID_TOKEN_REQUEST_URL_VAR],
+  token: process.env[ACTIONS_ID_TOKEN_REQUEST_TOKEN_VAR]
+}
+
+function clearOidcEnv(): void {
+  delete process.env[ACTIONS_ID_TOKEN_REQUEST_URL_VAR]
+  delete process.env[ACTIONS_ID_TOKEN_REQUEST_TOKEN_VAR]
+}
+
+function setOidcEnv(): void {
+  process.env[ACTIONS_ID_TOKEN_REQUEST_URL_VAR] =
+    'https://token.actions.githubusercontent.com/oidc/token'
+  process.env[ACTIONS_ID_TOKEN_REQUEST_TOKEN_VAR] = 'runner-request-token'
+}
+
 describe('action-utils', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     jest.clearAllMocks()
+    // Default to "no OIDC available" so existing tests aren't affected by
+    // whatever CI job happens to run them.
+    clearOidcEnv()
+  })
+
+  afterAll(() => {
+    if (originalOidcEnv.url === undefined) {
+      delete process.env[ACTIONS_ID_TOKEN_REQUEST_URL_VAR]
+    } else {
+      process.env[ACTIONS_ID_TOKEN_REQUEST_URL_VAR] = originalOidcEnv.url
+    }
+    if (originalOidcEnv.token === undefined) {
+      delete process.env[ACTIONS_ID_TOKEN_REQUEST_TOKEN_VAR]
+    } else {
+      process.env[ACTIONS_ID_TOKEN_REQUEST_TOKEN_VAR] = originalOidcEnv.token
+    }
   })
 
   describe('parseTestRunTagsFromInputs', () => {
@@ -216,7 +252,7 @@ describe('action-utils', () => {
       expect(result.debug).toBe(true)
     })
 
-    it('should throw error when neither upload token nor api key is provided', () => {
+    it('should throw error naming both the token and OIDC options when neither is available', () => {
       mockedCore.getInput.mockImplementation((name: string) => {
         const values: Record<string, string> = {
           [GAFFER_UPLOAD_TOKEN_VAR]: '',
@@ -226,9 +262,8 @@ describe('action-utils', () => {
         return values[name] || ''
       })
 
-      expect(() => parseActionInputs()).toThrow(
-        'Upload token not provided. Set the gaffer_upload_token input.'
-      )
+      expect(() => parseActionInputs()).toThrow(/gaffer_upload_token/)
+      expect(() => parseActionInputs()).toThrow(/permissions: id-token: write/)
     })
 
     it('should throw error when report path is not provided', () => {
@@ -242,6 +277,73 @@ describe('action-utils', () => {
       })
 
       expect(() => parseActionInputs()).toThrow('Report path not provided.')
+    })
+
+    describe('OIDC fallback (GAF-241)', () => {
+      it('returns apiKey: undefined when no token is set but OIDC env vars are present', () => {
+        setOidcEnv()
+        mockedCore.getInput.mockImplementation((name: string) => {
+          const values: Record<string, string> = {
+            [GAFFER_UPLOAD_TOKEN_VAR]: '',
+            [GAFFER_API_KEY_VAR]: '',
+            [REPORT_PATH_VAR]: './reports/test.xml'
+          }
+          return values[name] || ''
+        })
+
+        const result = parseActionInputs()
+
+        expect(result.apiKey).toBeUndefined()
+        expect(mockedCore.warning).not.toHaveBeenCalled()
+      })
+
+      it('still throws when OIDC env is only half-present', () => {
+        process.env[ACTIONS_ID_TOKEN_REQUEST_URL_VAR] =
+          'https://token.actions.githubusercontent.com/oidc/token'
+        // ACTIONS_ID_TOKEN_REQUEST_TOKEN deliberately left unset.
+        mockedCore.getInput.mockImplementation((name: string) => {
+          const values: Record<string, string> = {
+            [GAFFER_UPLOAD_TOKEN_VAR]: '',
+            [GAFFER_API_KEY_VAR]: '',
+            [REPORT_PATH_VAR]: './reports/test.xml'
+          }
+          return values[name] || ''
+        })
+
+        expect(() => parseActionInputs()).toThrow(/gaffer_upload_token/)
+      })
+
+      it('prefers a stored token over OIDC when both are available', () => {
+        setOidcEnv()
+        mockedCore.getInput.mockImplementation((name: string) => {
+          const values: Record<string, string> = {
+            [GAFFER_UPLOAD_TOKEN_VAR]: 'gfr_stored-token',
+            [GAFFER_API_KEY_VAR]: '',
+            [REPORT_PATH_VAR]: './reports/test.xml'
+          }
+          return values[name] || ''
+        })
+
+        const result = parseActionInputs()
+
+        expect(result.apiKey).toBe('gfr_stored-token')
+      })
+    })
+  })
+
+  describe('hasGitHubActionsOidc', () => {
+    it('is false when neither OIDC env var is set', () => {
+      expect(hasGitHubActionsOidc()).toBe(false)
+    })
+
+    it('is false when only one OIDC env var is set', () => {
+      process.env[ACTIONS_ID_TOKEN_REQUEST_URL_VAR] = 'https://example.test'
+      expect(hasGitHubActionsOidc()).toBe(false)
+    })
+
+    it('is true when both OIDC env vars are set', () => {
+      setOidcEnv()
+      expect(hasGitHubActionsOidc()).toBe(true)
     })
   })
 })
