@@ -32,11 +32,11 @@ configuration. Plan storage caps are the only practical ceiling.
 
 > **Compatibility:** this needs a `gaffer` CLI release that contains the OIDC
 > exchange (`packages/cli/src/oidc.rs` in
-> [`gaffer-sh/gaffer`](https://github.com/gaffer-sh/gaffer)).
-> `DEFAULT_CLI_VERSION` in `src/utils/cli-install.ts` still pins `0.4.0`, which
-> predates it — this section describes the target behavior and will work once
-> that constant is bumped (or pass a `cli_version` input that points at a
-> release that has it).
+> [`gaffer-sh/gaffer`](https://github.com/gaffer-sh/gaffer)). This Action
+> defaults to CLI
+> [`0.7.0`](https://github.com/gaffer-sh/gaffer/releases/tag/cli-v0.7.0), the
+> first release that has it, so this works out of the box. Pass a `cli_version`
+> input only if you need a different release.
 
 Skip the `GAFFER_UPLOAD_TOKEN` secret entirely by granting the job
 `id-token: write`. The `gaffer` CLI inside this Action exchanges the runner's
