@@ -30,11 +30,11 @@ const CLI_REPO = 'gaffer-sh/gaffer'
 
 /**
  * Default CLI version installed when `cli_version` input is empty.
- * Last verified against `cli-v0.4.0` (TASK-49). Bump alongside any v2.x.x
- * release that depends on a newer CLI feature; pinning by default keeps
- * the Action deterministic.
+ * Last verified against `cli-v0.7.0`, the first CLI release containing the
+ * OIDC exchange. Bump alongside any v2.x.x release that depends on a newer
+ * CLI feature; pinning by default keeps the Action deterministic.
  */
-const DEFAULT_CLI_VERSION = '0.4.0'
+const DEFAULT_CLI_VERSION = '0.7.0'
 
 /** Conservative semver subset, matches `1.2.3` and `1.2.3-alpha.1`. */
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/

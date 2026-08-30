@@ -147,6 +147,76 @@ describe('run() — happy path', () => {
 
     expect(mockedCliInstall.installCli).toHaveBeenCalledWith('0.5.0')
   })
+
+  it('logs install path, invocation, and stdout when debug is enabled', async () => {
+    mockedActionUtils.parseActionInputs.mockReturnValue({
+      ...baseInputs,
+      debug: true
+    })
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
+    mockedSpawn.mockReturnValue(
+      fakeChild({
+        stdout: `some progress\n${JSON.stringify({ status: 'success' })}\n`
+      }) as unknown as childProcess.ChildProcess
+    )
+
+    await run()
+
+    expect(mockedCore.info).toHaveBeenCalledWith(
+      expect.stringContaining('gaffer 0.4.0 installed at')
+    )
+    expect(mockedCore.info).toHaveBeenCalledWith(
+      expect.stringContaining('invoking: gaffer upload')
+    )
+    expect(mockedCore.info).toHaveBeenCalledWith(
+      expect.stringContaining('CLI stdout:')
+    )
+    expect(mockedCore.setFailed).not.toHaveBeenCalled()
+  })
+})
+
+describe('run() — OIDC fallback', () => {
+  it('omits --token when apiKey is undefined and still succeeds', async () => {
+    mockedActionUtils.parseActionInputs.mockReturnValue({
+      ...baseInputs,
+      apiKey: undefined
+    })
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
+    mockedSpawn.mockReturnValue(
+      fakeChild({
+        stdout: `${JSON.stringify({ status: 'success' })}\n`
+      }) as unknown as childProcess.ChildProcess
+    )
+
+    await run()
+
+    const callArgs = mockedSpawn.mock.calls[0][1] as string[]
+    expect(callArgs).not.toContain('--token')
+    expect(mockedCore.setOutput).toHaveBeenCalledWith('status', 'success')
+    expect(mockedCore.setFailed).not.toHaveBeenCalled()
+  })
+
+  it('does not override the child process env, so OIDC env vars are inherited', async () => {
+    mockedActionUtils.parseActionInputs.mockReturnValue({
+      ...baseInputs,
+      apiKey: undefined
+    })
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
+    mockedSpawn.mockReturnValue(
+      fakeChild({
+        stdout: `${JSON.stringify({ status: 'success' })}\n`
+      }) as unknown as childProcess.ChildProcess
+    )
+
+    await run()
+
+    const spawnOptions = mockedSpawn.mock.calls[0][2] as Record<string, unknown>
+    // No `env` key at all means Node's default: inherit the full parent
+    // process.env, including ACTIONS_ID_TOKEN_REQUEST_URL/_TOKEN when the
+    // job has id-token: write. A restrictive `env` override here would
+    // silently break the CLI's own OIDC exchange.
+    expect(spawnOptions).not.toHaveProperty('env')
+  })
 })
 
 describe('run() — failure surfaces', () => {
@@ -196,6 +266,27 @@ describe('run() — failure surfaces', () => {
     expect(mockedCore.setFailed).toHaveBeenCalledWith(
       expect.stringContaining('exit code 2')
     )
+  })
+
+  it('bounds the retained stderr tail so an early marker falls out but a late one survives', async () => {
+    mockedActionUtils.parseActionInputs.mockReturnValue(baseInputs)
+    mockedActionUtils.parseTestRunTagsFromInputs.mockReturnValue({})
+    // No JSON envelope here — well over the 8 KB tail cap, unstructured, so
+    // the failure message falls back to `lastLines(stderrTail, 5)`.
+    const filler = `${'x'.repeat(50)}\n`.repeat(300) // ~15.3 KB, over the 8 KB cap
+    const stderrText = `EARLY_MARKER_LINE\n${filler}FINAL_MARKER_LINE\n`
+    mockedSpawn.mockReturnValue(
+      fakeChild({
+        stderr: stderrText,
+        exitCode: 2
+      }) as unknown as childProcess.ChildProcess
+    )
+
+    await run()
+
+    const [message] = mockedCore.setFailed.mock.calls[0] as [string]
+    expect(message).toContain('FINAL_MARKER_LINE')
+    expect(message).not.toContain('EARLY_MARKER_LINE')
   })
 
   it('reports the signal name when the CLI is killed', async () => {
@@ -291,6 +382,17 @@ describe('buildCliArgs', () => {
     const on = buildCliArgs({ ...baseInputs, debug: true }, {})
     expect(off).not.toContain('--debug')
     expect(on).toContain('--debug')
+  })
+
+  it('includes --token when apiKey is set', () => {
+    const args = buildCliArgs(baseInputs, {})
+    expect(args).toContain('--token')
+    expect(args[args.indexOf('--token') + 1]).toBe('gfr_test')
+  })
+
+  it('omits --token entirely when apiKey is undefined (OIDC fallback)', () => {
+    const args = buildCliArgs({ ...baseInputs, apiKey: undefined }, {})
+    expect(args).not.toContain('--token')
   })
 })
 

@@ -148,13 +148,15 @@ export function buildCliArgs(
     inputs.apiEndpoint.replace(/\/api\/upload\/?$/, '') ||
     'https://app.gaffer.sh'
 
-  const args: string[] = [
-    inputs.reportPath,
-    '--token',
-    inputs.apiKey,
-    '--api-url',
-    apiUrl
-  ]
+  const args: string[] = [inputs.reportPath, '--api-url', apiUrl]
+
+  // No token means the caller is relying on GitHub Actions OIDC (see
+  // hasGitHubActionsOidc() in action-utils.ts). Omit --token entirely
+  // rather than passing an empty string — the CLI does its own OIDC
+  // exchange only when no token is given at all.
+  if (inputs.apiKey) {
+    args.push('--token', inputs.apiKey)
+  }
 
   if (tags.commitSha) args.push('--commit-sha', tags.commitSha)
   if (tags.branch) args.push('--branch', tags.branch)
@@ -220,6 +222,11 @@ function lastLines(text: string, count: number): string {
 
 async function runCli(binary: string, args: string[]): Promise<CliResult> {
   return new Promise(resolve => {
+    // No `env` option here means Node inherits the full parent process
+    // environment, including ACTIONS_ID_TOKEN_REQUEST_URL /
+    // ACTIONS_ID_TOKEN_REQUEST_TOKEN when the job has id-token: write. That
+    // is required for the CLI's own OIDC exchange when we omit --token
+    // above — do not add an `env` override that would filter these out.
     const child = spawn(binary, ['upload', ...args], {
       stdio: ['ignore', 'pipe', 'pipe']
     })

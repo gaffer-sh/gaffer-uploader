@@ -11,7 +11,12 @@ branding:
 
 inputs:
   gaffer_upload_token:
-    description: 'Upload token for your Gaffer project (gfr_ prefix)'
+    description:
+      "Upload token for your Gaffer project (gfr_ prefix). Optional when the
+      workflow grants `permissions: id-token: write`: the gaffer CLI then
+      exchanges the runner's OIDC token automatically, with no stored token to
+      create or rotate. A token here still takes precedence over OIDC when both
+      are available."
     required: false
   gaffer_api_key:
     description:

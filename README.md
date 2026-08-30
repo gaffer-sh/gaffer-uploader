@@ -28,22 +28,67 @@ configuration. Plan storage caps are the only practical ceiling.
     test_suite: e2e
 ```
 
+## Authenticate without a stored token (OIDC)
+
+> **Compatibility:** this needs a `gaffer` CLI release that contains the OIDC
+> exchange (`packages/cli/src/oidc.rs` in
+> [`gaffer-sh/gaffer`](https://github.com/gaffer-sh/gaffer)). This Action
+> defaults to CLI
+> [`0.7.0`](https://github.com/gaffer-sh/gaffer/releases/tag/cli-v0.7.0), the
+> first release that has it, so this works out of the box. Pass a `cli_version`
+> input only if you need a different release.
+
+Skip the `GAFFER_UPLOAD_TOKEN` secret entirely by granting the job
+`id-token: write`. The `gaffer` CLI inside this Action exchanges the runner's
+own GitHub Actions OIDC identity token for a project-scoped upload token, so
+there's nothing to create or rotate:
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # required: lets gaffer request a runner identity token
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests
+        run: npm test
+
+      - name: Upload test reports to Gaffer
+        uses: gaffer-sh/gaffer-uploader@v2
+        if: always()
+        with:
+          report_path: ./test-results
+          commit_sha: ${{ github.sha }}
+          branch: ${{ github.ref_name }}
+          # no gaffer_upload_token
+```
+
+On the first upload from a repository, Gaffer automatically provisions an
+unclaimed organization and project for that repository, no signup step required.
+The job log prints a claim URL; a repo admin visits it once to claim the org
+into their own account. If `gaffer_upload_token` (or the deprecated
+`gaffer_api_key`) is set, it still works and takes precedence: OIDC is only the
+fallback when no token is configured.
+
 ## Inputs
 
-| Input                 | Required | Description                                                                                                                                                                                                      |
-| --------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `gaffer_upload_token` | Yes      | Project upload token (`gfr_...`). Create one in **Project Settings > Upload Tokens**.                                                                                                                            |
-| `report_path`         | Yes      | File or directory containing reports to upload. Directories are walked recursively.                                                                                                                              |
-| `commit_sha`          | No       | Commit recorded as a tag on the upload session. Default: from `${{ github.sha }}` if you pass it.                                                                                                                |
-| `branch`              | No       | Branch recorded as a tag on the upload session.                                                                                                                                                                  |
-| `test_framework`      | No       | Test framework label, e.g. `playwright`, `jest`, `pytest`.                                                                                                                                                       |
-| `test_suite`          | No       | Test suite label, e.g. `unit`, `integration`, `e2e`.                                                                                                                                                             |
-| `api_endpoint`        | No       | Override the dashboard URL. Use `https://preview.gaffer.sh` for preview deploys. Both bare URLs and the legacy `/api/upload` form are accepted.                                                                  |
-| `upload_timeout`      | No       | Per-request HTTP timeout in seconds (default: `30`). Bump to `300` or higher for multi-gigabyte uploads — each multipart `PUT` runs against this timeout.                                                        |
-| `max_file_size_mb`    | No       | Per-file size limit in MB (default: `100`, platform max: `5000`). Files above this are rejected up front. Multipart elevation above 90 MB is automatic — there is no separate flag for it.                       |
-| `cli_version`         | No       | Pin the `gaffer` CLI version installed by this Action. Defaults to the version this Action was released with. Set this only if you need a newer CLI feature without waiting for a new `gaffer-uploader` release. |
-| `debug`               | No       | Print per-part throughput and the CLI's structured response (default: `false`).                                                                                                                                  |
-| `gaffer_api_key`      | No       | **Deprecated.** Use `gaffer_upload_token`. Still accepted for v1 compatibility, with a warning at runtime.                                                                                                       |
+| Input                 | Required | Description                                                                                                                                                                                                                 |
+| --------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gaffer_upload_token` | No       | Project upload token (`gfr_...`). Create one in **Project Settings > Upload Tokens**. Optional under `permissions: id-token: write` — see [Authenticate without a stored token](#authenticate-without-a-stored-token-oidc). |
+| `report_path`         | Yes      | File or directory containing reports to upload. Directories are walked recursively.                                                                                                                                         |
+| `commit_sha`          | No       | Commit recorded as a tag on the upload session. Default: from `${{ github.sha }}` if you pass it.                                                                                                                           |
+| `branch`              | No       | Branch recorded as a tag on the upload session.                                                                                                                                                                             |
+| `test_framework`      | No       | Test framework label, e.g. `playwright`, `jest`, `pytest`.                                                                                                                                                                  |
+| `test_suite`          | No       | Test suite label, e.g. `unit`, `integration`, `e2e`.                                                                                                                                                                        |
+| `api_endpoint`        | No       | Override the dashboard URL. Use `https://preview.gaffer.sh` for preview deploys. Both bare URLs and the legacy `/api/upload` form are accepted.                                                                             |
+| `upload_timeout`      | No       | Per-request HTTP timeout in seconds (default: `30`). Bump to `300` or higher for multi-gigabyte uploads — each multipart `PUT` runs against this timeout.                                                                   |
+| `max_file_size_mb`    | No       | Per-file size limit in MB (default: `100`, platform max: `5000`). Files above this are rejected up front. Multipart elevation above 90 MB is automatic — there is no separate flag for it.                                  |
+| `cli_version`         | No       | Pin the `gaffer` CLI version installed by this Action. Defaults to the version this Action was released with. Set this only if you need a newer CLI feature without waiting for a new `gaffer-uploader` release.            |
+| `debug`               | No       | Print per-part throughput and the CLI's structured response (default: `false`).                                                                                                                                             |
+| `gaffer_api_key`      | No       | **Deprecated.** Use `gaffer_upload_token`. Still accepted for v1 compatibility, with a warning at runtime.                                                                                                                  |
 
 ## Outputs
 
