@@ -34,9 +34,9 @@ configuration. Plan storage caps are the only practical ceiling.
 > exchange (`packages/cli/src/oidc.rs` in
 > [`gaffer-sh/gaffer`](https://github.com/gaffer-sh/gaffer)). This Action
 > defaults to CLI
-> [`0.7.0`](https://github.com/gaffer-sh/gaffer/releases/tag/cli-v0.7.0), the
-> first release that has it, so this works out of the box. Pass a `cli_version`
-> input only if you need a different release.
+> [`0.9.0`](https://github.com/gaffer-sh/gaffer/releases/tag/cli-v0.9.0), which
+> has it (it first shipped in `0.7.0`), so this works out of the box. Pass a
+> `cli_version` input only if you need a different release.
 
 Skip the `GAFFER_UPLOAD_TOKEN` secret entirely by granting the job
 `id-token: write`. The `gaffer` CLI inside this Action exchanges the runner's
@@ -89,6 +89,15 @@ fallback when no token is configured.
 | `cli_version`         | No       | Pin the `gaffer` CLI version installed by this Action. Defaults to the version this Action was released with. Set this only if you need a newer CLI feature without waiting for a new `gaffer-uploader` release.            |
 | `debug`               | No       | Print per-part throughput and the CLI's structured response (default: `false`).                                                                                                                                             |
 | `gaffer_api_key`      | No       | **Deprecated.** Use `gaffer_upload_token`. Still accepted for v1 compatibility, with a warning at runtime.                                                                                                                  |
+
+### Commit details
+
+When you pass `commit_sha` and that commit is in the checkout, the upload also
+carries its author name, committer name, dates and message, so run cards can
+show the author. Email addresses are never sent. If the commit isn't in the
+checkout, the upload still succeeds without these details: passing
+`github.event.pull_request.head.sha` with the default shallow `actions/checkout`
+needs `fetch-depth: 0` or a `ref` set to that sha.
 
 ## Outputs
 
